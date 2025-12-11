@@ -1,17 +1,30 @@
-"""Unit tests for TreeGenerator in codemap.scout.tree module."""
+"""Unit tests for TreeGenerator in codemap.scout.tree module.
 
+This module tests the TreeGenerator class which produces TreeReport objects
+containing directory tree visualizations and statistics. Tests cover:
+- Basic functionality and TreeReport object structure
+- Hidden directory filtering (.git, .venv, __pycache__)
+- Alphabetical sorting of files and directories
+- Tree structure formatting with correct symbols and indentation
+- Edge cases and error handling
+- .gitignore integration for excluding files/directories
+- Unlimited depth traversal (no artificial limits)
+"""
+
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 
+from codemap.scout.models import TreeReport
 from codemap.scout.tree import TreeGenerator
 
 
 class TestTreeGeneratorBasic:
     """Test suite for basic TreeGenerator functionality."""
 
-    def test_generate_returns_string(self, tmp_path: Path) -> None:
-        """Test that generate method returns a string."""
+    def test_generate_returns_tree_report(self, tmp_path: Path) -> None:
+        """Test that generate method returns a TreeReport object."""
         # Arrange
         generator = TreeGenerator()
 
@@ -19,7 +32,10 @@ class TestTreeGeneratorBasic:
         result = generator.generate(tmp_path)
 
         # Assert
-        assert isinstance(result, str)
+        assert isinstance(result, TreeReport)
+        assert isinstance(result.tree_string, str)
+        assert result.total_files >= 0
+        assert result.total_folders >= 0
 
     def test_generate_empty_directory(self, tmp_path: Path) -> None:
         """Test tree generation for empty directory."""
@@ -30,8 +46,10 @@ class TestTreeGeneratorBasic:
         result = generator.generate(tmp_path)
 
         # Assert
-        assert isinstance(result, str)
-        assert f"{tmp_path.name}/" in result
+        assert isinstance(result, TreeReport)
+        assert f"{tmp_path.name}/" in result.tree_string
+        assert result.total_files == 0
+        assert result.total_folders == 0
 
     def test_generate_single_file(self, tmp_path: Path) -> None:
         """Test tree generation for directory with single file."""
@@ -43,8 +61,10 @@ class TestTreeGeneratorBasic:
         result = generator.generate(tmp_path)
 
         # Assert
-        assert isinstance(result, str)
-        assert "README.md" in result
+        assert isinstance(result, TreeReport)
+        assert "README.md" in result.tree_string
+        assert result.total_files == 1
+        assert result.total_folders == 0
 
     def test_generate_single_directory(self, tmp_path: Path) -> None:
         """Test tree generation for directory with single subdirectory."""
@@ -56,89 +76,131 @@ class TestTreeGeneratorBasic:
         result = generator.generate(tmp_path)
 
         # Assert
-        assert isinstance(result, str)
-        assert "src/" in result
+        assert isinstance(result, TreeReport)
+        assert "src/" in result.tree_string
+        assert result.total_files == 0
+        assert result.total_folders == 1
 
+    def test_returns_report_object(self, tmp_path: Path) -> None:
+        """Test A: Verify TreeReport with exact file counts and token estimation."""
+        # Arrange - Create exactly 3 files
+        (tmp_path / "file1.py").write_text("content")
+        (tmp_path / "file2.py").write_text("content")
+        (tmp_path / "file3.py").write_text("content")
+        generator = TreeGenerator()
 
-class TestTreeGeneratorMaxDepth:
-    """Test suite for max_depth parameter functionality."""
+        # Act
+        result = generator.generate(tmp_path)
 
-    def test_generate_respects_max_depth_default(self, tmp_path: Path) -> None:
-        """Test that default max_depth=2 is respected."""
+        # Assert
+        assert isinstance(result, TreeReport)
+        assert result.total_files == 3
+        assert result.total_folders == 0
+        assert "file1.py" in result.tree_string
+        assert "file2.py" in result.tree_string
+        assert "file3.py" in result.tree_string
+        assert result.estimated_tokens > 0
+
+    def test_estimated_tokens_matches_formula(self, tmp_path: Path) -> None:
+        """Test that estimated_tokens equals int(len(tree_string) / 3.5)."""
+        # Arrange - Create a simple deterministic structure
+        (tmp_path / "a.py").write_text("content")
+        (tmp_path / "b.py").write_text("content")
+        generator = TreeGenerator()
+
+        # Act
+        result = generator.generate(tmp_path)
+
+        # Assert - Verify the formula: int(len(tree_string) / 3.5)
+        expected_tokens = int(len(result.tree_string) / 3.5)
+        assert result.estimated_tokens == expected_tokens
+        # Sanity check: tokens should be roughly 1/3.5 of string length
+        assert result.estimated_tokens > 0
+        assert result.estimated_tokens < len(result.tree_string)
+
+    def test_deep_nesting(self, tmp_path: Path) -> None:
+        """Test B: Verify unlimited depth traversal with 10-level nesting."""
+        # Arrange - Create 10 levels deep nested structure
+        current = tmp_path
+        folder_names = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"]
+        for folder_name in folder_names:
+            current = current / folder_name
+            current.mkdir()
+        (current / "deep_file.py").write_text("content")
+
+        generator = TreeGenerator()
+
+        # Act
+        result = generator.generate(tmp_path)
+
+        # Assert - Proves no depth limit exists
+        assert "deep_file.py" in result.tree_string
+        assert result.total_files == 1
+        assert result.total_folders == 10
+        # Verify all intermediate folder names appear
+        for folder_name in folder_names:
+            assert f"{folder_name}/" in result.tree_string
+
+    def test_respects_gitignore(self, tmp_path: Path) -> None:
+        """Test C: Verify .gitignore rules are applied to exclude files."""
         # Arrange
+        (tmp_path / ".gitignore").write_text("*.txt\n")
+        (tmp_path / "secret.txt").write_text("secret content")
+        (tmp_path / "allowed.py").write_text("allowed content")
+        generator = TreeGenerator()
+
+        # Act
+        result = generator.generate(tmp_path)
+
+        # Assert - gitignore rule applied
+        assert "secret.txt" not in result.tree_string
+        assert "allowed.py" in result.tree_string
+        assert result.total_files == 1  # Only allowed.py counted
+        # .gitignore itself should not appear in tree (meta-file)
+        assert ".gitignore" not in result.tree_string
+
+    def test_gitignore_directory_pattern(self, tmp_path: Path) -> None:
+        """Test .gitignore directory patterns exclude entire directories."""
+        # Arrange
+        (tmp_path / ".gitignore").write_text("node_modules/\n")
+        (tmp_path / "node_modules").mkdir()
+        (tmp_path / "node_modules" / "package.json").write_text("content")
         (tmp_path / "src").mkdir()
         (tmp_path / "src" / "main.py").write_text("content")
-        (tmp_path / "src" / "utils").mkdir()
-        (tmp_path / "src" / "utils" / "helper.py").write_text("content")  # Depth 2
-        (tmp_path / "src" / "utils" / "deep").mkdir()
-        (tmp_path / "src" / "utils" / "deep" / "nested.py").write_text(
-            "content"
-        )  # Depth 3
-
         generator = TreeGenerator()
 
         # Act
-        result = generator.generate(tmp_path)  # default max_depth=2
+        result = generator.generate(tmp_path)
 
         # Assert
-        assert "main.py" in result
-        assert "utils/" in result
-        assert "helper.py" in result
-        assert "nested.py" not in result  # Depth 3 should not be shown
+        assert "node_modules" not in result.tree_string
+        assert "package.json" not in result.tree_string
+        assert "src/" in result.tree_string
+        assert "main.py" in result.tree_string
 
-    def test_generate_max_depth_zero(self, tmp_path: Path) -> None:
-        """Test tree generation with max_depth=0 shows only root."""
+    def test_gitignore_unreadable_continues_traversal(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that unreadable .gitignore is gracefully ignored and traversal continues."""
         # Arrange
-        (tmp_path / "README.md").write_text("content")
-        (tmp_path / "src").mkdir()
+        (tmp_path / ".gitignore").write_text("*.txt\n")
+        (tmp_path / "file.txt").write_text("content")
+        (tmp_path / "file.py").write_text("content")
         generator = TreeGenerator()
 
-        # Act
-        result = generator.generate(tmp_path, max_depth=0)
+        # Mock read_text to raise OSError
+        def mock_read_text(*args: object, **kwargs: object) -> str:
+            raise OSError("Permission denied")
 
-        # Assert
-        assert f"{tmp_path.name}/" in result
-        assert "README.md" not in result
-        assert "src/" not in result
-
-    def test_generate_max_depth_one(self, tmp_path: Path) -> None:
-        """Test tree generation with max_depth=1 shows root and direct children."""
-        # Arrange
-        (tmp_path / "README.md").write_text("content")
-        (tmp_path / "src").mkdir()
-        (tmp_path / "src" / "main.py").write_text("content")
-        generator = TreeGenerator()
+        monkeypatch.setattr(Path, "read_text", mock_read_text)
 
         # Act
-        result = generator.generate(tmp_path, max_depth=1)
+        result = generator.generate(tmp_path)
 
-        # Assert
-        assert "README.md" in result
-        assert "src/" in result
-        assert "main.py" not in result  # Depth 2, should not be shown
-
-    def test_generate_max_depth_three(self, tmp_path: Path) -> None:
-        """Test tree generation with max_depth=3 shows deeper nesting."""
-        # Arrange
-        (tmp_path / "src").mkdir()
-        (tmp_path / "src" / "utils").mkdir()
-        (tmp_path / "src" / "utils" / "deep").mkdir()
-        (tmp_path / "src" / "utils" / "deep" / "nested.py").write_text("content")
-        (tmp_path / "src" / "utils" / "deep" / "very_deep").mkdir()
-        (tmp_path / "src" / "utils" / "deep" / "very_deep" / "file.py").write_text(
-            "content"
-        )
-
-        generator = TreeGenerator()
-
-        # Act
-        result = generator.generate(tmp_path, max_depth=3)
-
-        # Assert
-        assert "utils/" in result
-        assert "deep/" in result
-        assert "nested.py" in result
-        assert "file.py" not in result  # Depth 4, should not be shown
+        # Assert - Both files should appear (gitignore not applied due to read error)
+        assert "file.txt" in result.tree_string
+        assert "file.py" in result.tree_string
+        assert result.total_files == 2
 
 
 class TestTreeGeneratorIgnoreHidden:
@@ -154,12 +216,12 @@ class TestTreeGeneratorIgnoreHidden:
         generator = TreeGenerator()
 
         # Act
-        result = generator.generate(tmp_path, max_depth=5)
+        result = generator.generate(tmp_path)
 
         # Assert
-        assert ".git" not in result
-        assert "config" not in result
-        assert "README.md" in result
+        assert ".git" not in result.tree_string
+        assert "config" not in result.tree_string
+        assert "README.md" in result.tree_string
 
     def test_generate_ignores_venv_directory(self, tmp_path: Path) -> None:
         """Test that .venv directory is always ignored."""
@@ -172,13 +234,13 @@ class TestTreeGeneratorIgnoreHidden:
         generator = TreeGenerator()
 
         # Act
-        result = generator.generate(tmp_path, max_depth=5)
+        result = generator.generate(tmp_path)
 
         # Assert
-        assert ".venv" not in result
-        assert "lib" not in result
-        assert "python.py" not in result
-        assert "main.py" in result
+        assert ".venv" not in result.tree_string
+        assert "lib" not in result.tree_string
+        assert "python.py" not in result.tree_string
+        assert "main.py" in result.tree_string
 
     def test_generate_ignores_pycache_directory(self, tmp_path: Path) -> None:
         """Test that __pycache__ directory is always ignored."""
@@ -190,12 +252,12 @@ class TestTreeGeneratorIgnoreHidden:
         generator = TreeGenerator()
 
         # Act
-        result = generator.generate(tmp_path, max_depth=5)
+        result = generator.generate(tmp_path)
 
         # Assert
-        assert "__pycache__" not in result
-        assert "module.pyc" not in result
-        assert "module.py" in result
+        assert "__pycache__" not in result.tree_string
+        assert "module.pyc" not in result.tree_string
+        assert "module.py" in result.tree_string
 
     def test_generate_ignores_multiple_hidden(self, tmp_path: Path) -> None:
         """Test that multiple hidden directories are ignored simultaneously."""
@@ -213,18 +275,18 @@ class TestTreeGeneratorIgnoreHidden:
         generator = TreeGenerator()
 
         # Act
-        result = generator.generate(tmp_path, max_depth=5)
+        result = generator.generate(tmp_path)
 
         # Assert
-        assert ".git" not in result
-        assert ".venv" not in result
-        assert "__pycache__" not in result
-        assert "config" not in result
-        assert "lib" not in result
-        assert "cache.pyc" not in result
-        assert "README.md" in result
-        assert "src/" in result
-        assert "main.py" in result
+        assert ".git" not in result.tree_string
+        assert ".venv" not in result.tree_string
+        assert "__pycache__" not in result.tree_string
+        assert "config" not in result.tree_string
+        assert "lib" not in result.tree_string
+        assert "cache.pyc" not in result.tree_string
+        assert "README.md" in result.tree_string
+        assert "src/" in result.tree_string
+        assert "main.py" in result.tree_string
 
 
 class TestTreeGeneratorSorting:
@@ -243,14 +305,12 @@ class TestTreeGeneratorSorting:
         result = generator.generate(tmp_path)
 
         # Assert
-        lines = result.strip().split("\n")
+        lines = result.tree_string.strip().split("\n")
         alpha_idx = next(i for i, line in enumerate(lines) if "alpha.py" in line)
         beta_idx = next(i for i, line in enumerate(lines) if "beta.py" in line)
         zebra_idx = next(i for i, line in enumerate(lines) if "zebra.py" in line)
 
-        assert (
-            alpha_idx < beta_idx < zebra_idx
-        ), "Files should be sorted alphabetically"
+        assert alpha_idx < beta_idx < zebra_idx, "Files should be sorted alphabetically"
 
     def test_generate_sorts_directories_alphabetically(self, tmp_path: Path) -> None:
         """Test that directories are sorted alphabetically."""
@@ -265,14 +325,12 @@ class TestTreeGeneratorSorting:
         result = generator.generate(tmp_path)
 
         # Assert
-        lines = result.strip().split("\n")
+        lines = result.tree_string.strip().split("\n")
         alpha_idx = next(i for i, line in enumerate(lines) if "alpha/" in line)
         beta_idx = next(i for i, line in enumerate(lines) if "beta/" in line)
         zebra_idx = next(i for i, line in enumerate(lines) if "zebra/" in line)
 
-        assert (
-            alpha_idx < beta_idx < zebra_idx
-        ), "Directories should be sorted alphabetically"
+        assert alpha_idx < beta_idx < zebra_idx, "Directories should be sorted alphabetically"
 
     def test_generate_sorts_mixed_deterministically(self, tmp_path: Path) -> None:
         """Test that files and directories are sorted alphabetically together."""
@@ -288,7 +346,7 @@ class TestTreeGeneratorSorting:
         result = generator.generate(tmp_path)
 
         # Assert
-        lines = result.strip().split("\n")
+        lines = result.tree_string.strip().split("\n")
         alpha_idx = next(i for i, line in enumerate(lines) if "alpha/" in line)
         beta_idx = next(i for i, line in enumerate(lines) if "beta.py" in line)
         gamma_idx = next(i for i, line in enumerate(lines) if "gamma/" in line)
@@ -314,10 +372,10 @@ class TestTreeGeneratorFormat:
 
         generator = TreeGenerator()
 
-        # Act
-        result = generator.generate(tmp_path, max_depth=2)
+        # Act - No max_depth parameter, full depth traversal
+        result = generator.generate(tmp_path)
 
-        # Assert
+        # Assert - Full depth including helper.py
         expected_lines = [
             f"{tmp_path.name}/",
             "├── README.md",
@@ -329,12 +387,12 @@ class TestTreeGeneratorFormat:
         expected = "\n".join(expected_lines)
 
         # Verify exact match including order and completeness
-        assert result.strip().splitlines() == expected.splitlines(), (
-            f"Tree structure mismatch.\nExpected:\n{expected}\n\nGot:\n{result.strip()}"
+        assert result.tree_string.strip().splitlines() == expected.splitlines(), (
+            f"Tree structure mismatch.\nExpected:\n{expected}\n\nGot:\n{result.tree_string.strip()}"
         )
 
         # Verify that .git is not in output
-        assert ".git" not in result
+        assert ".git" not in result.tree_string
 
     def test_generate_uses_tree_symbols(self, tmp_path: Path) -> None:
         """Test that correct tree symbols are used for structure."""
@@ -349,8 +407,8 @@ class TestTreeGeneratorFormat:
         result = generator.generate(tmp_path)
 
         # Assert
-        assert "├──" in result, "Should contain branch symbol ├──"
-        assert "└──" in result, "Should contain last item symbol └──"
+        assert "├──" in result.tree_string, "Should contain branch symbol ├──"
+        assert "└──" in result.tree_string, "Should contain last item symbol └──"
 
     def test_generate_indentation_consistency(self, tmp_path: Path) -> None:
         """Test that indentation is consistent across levels."""
@@ -362,10 +420,10 @@ class TestTreeGeneratorFormat:
         generator = TreeGenerator()
 
         # Act
-        result = generator.generate(tmp_path, max_depth=3)
+        result = generator.generate(tmp_path)
 
         # Assert
-        lines = result.strip().split("\n")
+        lines = result.tree_string.strip().split("\n")
 
         # Define valid tree prefix patterns
         # Level 1: starts directly with tree symbol
@@ -448,15 +506,6 @@ class TestTreeGeneratorEdgeCases:
         with pytest.raises(ValueError, match="Path is not a directory"):
             generator.generate(file_path)
 
-    def test_generate_raises_error_for_negative_max_depth(self, tmp_path: Path) -> None:
-        """Test that generate raises ValueError for negative max_depth."""
-        # Arrange
-        generator = TreeGenerator()
-
-        # Act & Assert
-        with pytest.raises(ValueError, match="max_depth must be non-negative"):
-            generator.generate(tmp_path, max_depth=-1)
-
     def test_generate_with_special_characters_in_names(self, tmp_path: Path) -> None:
         """Test tree generation with special characters in file/directory names."""
         # Arrange
@@ -471,7 +520,40 @@ class TestTreeGeneratorEdgeCases:
         result = generator.generate(tmp_path)
 
         # Assert
-        assert "file-with-dashes.py" in result
-        assert "file_with_underscores.py" in result
-        assert "file.with.dots.py" in result
-        assert "folder-name/" in result
+        assert "file-with-dashes.py" in result.tree_string
+        assert "file_with_underscores.py" in result.tree_string
+        assert "file.with.dots.py" in result.tree_string
+        assert "folder-name/" in result.tree_string
+
+    def test_generate_skips_unreadable_directory(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that unreadable directories are silently skipped during traversal."""
+        # Arrange
+        (tmp_path / "readable").mkdir()
+        (tmp_path / "readable" / "file.py").write_text("content")
+        (tmp_path / "unreadable").mkdir()
+        (tmp_path / "other.py").write_text("content")
+        generator = TreeGenerator()
+
+        # Store original iterdir
+        original_iterdir = Path.iterdir
+
+        # Mock iterdir to raise PermissionError for 'unreadable' directory
+        def mock_iterdir(self: Path) -> "Iterator[Path]":
+            if self.name == "unreadable":
+                raise PermissionError("Permission denied")
+            return original_iterdir(self)
+
+        monkeypatch.setattr(Path, "iterdir", mock_iterdir)
+
+        # Act
+        result = generator.generate(tmp_path)
+
+        # Assert - Traversal continues, unreadable dir is shown but empty
+        assert "readable/" in result.tree_string
+        assert "file.py" in result.tree_string
+        assert "unreadable/" in result.tree_string  # Dir itself is listed
+        assert "other.py" in result.tree_string
+        # The unreadable directory should be counted but its contents skipped
+        assert result.total_folders == 2  # readable and unreadable

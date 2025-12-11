@@ -23,9 +23,7 @@ class TestRunCommand:
 
         # Assert
         assert result is True
-        mock_run.assert_called_once_with(
-            ["echo", "test"], capture_output=True, text=True
-        )
+        mock_run.assert_called_once_with(["echo", "test"], capture_output=True, text=True)
 
     @patch("subprocess.run")
     def test_run_command_failure(self, mock_run: MagicMock) -> None:
@@ -40,9 +38,7 @@ class TestRunCommand:
 
         # Assert
         assert result is False
-        mock_run.assert_called_once_with(
-            ["false"], capture_output=True, text=True
-        )
+        mock_run.assert_called_once_with(["false"], capture_output=True, text=True)
 
     @patch("subprocess.run")
     @patch("builtins.print")

@@ -241,3 +241,101 @@
 - ruff check: All checks passed
 - ruff format: Applied (Listenkomposition einzeilig formatiert)
 - Coverage: 100% für `src/codemap/scout/tree.py`
+
+## Phase 3: TreeGenerator Refactoring - TreeReport Datenmodell
+
+### #030 - 2025-12-11 23:45
+**Aktion:** TreeReport Dataclass und Test-Suite Refactoring (TDD Red Phase)
+**Warum:** Plan 01 erfordert strukturierte Rückgabe statt String, unlimited depth, .gitignore-Support
+**Ergebnis:**
+- `src/codemap/scout/models.py` NEU: TreeReport Dataclass mit 4 Feldern
+  - `tree_string: str`, `total_files: int`, `total_folders: int`, `estimated_tokens: int`
+- `tests/unit/scout/test_tree.py` REFACTORED:
+  - Import `TreeReport` hinzugefügt
+  - `TestTreeGeneratorMaxDepth` Klasse komplett entfernt (4 Tests)
+  - `test_generate_raises_error_for_negative_max_depth` entfernt
+  - Alle Tests auf `result.tree_string` umgestellt
+  - 4 neue Tests: `test_returns_report_object`, `test_deep_nesting`, `test_respects_gitignore`, `test_gitignore_directory_pattern`
+- Red Phase verifiziert: 19 failed, 2 passed (AttributeError: 'str' has no attribute 'tree_string')
+
+### #031 - 2025-12-11 23:55
+**Aktion:** TreeGenerator auf TreeReport umgestellt (TDD Green Phase)
+**Warum:** Tests erwarten TreeReport-Objekte statt Strings
+**Ergebnis:**
+- `src/codemap/scout/tree.py` REFACTORED:
+  - `generate()` gibt `TreeReport` zurück statt `str`
+  - `max_depth` Parameter komplett entfernt
+  - `_generate_tree()` ohne depth-Parameter (unlimited depth)
+  - Counter `_file_count`, `_folder_count` für Statistiken
+  - `estimated_tokens = int(len(tree_string) / 3.5)`
+- 19/21 Tests bestanden (2 .gitignore-Tests noch fehlend)
+
+### #032 - 2025-12-12 00:05
+**Aktion:** .gitignore-Integration mit pathspec implementiert
+**Warum:** Tests `test_respects_gitignore` und `test_gitignore_directory_pattern` erforderten Pattern-Matching
+**Ergebnis:**
+- `import pathspec` hinzugefügt
+- `IGNORED_FILES = {".gitignore"}` für Meta-Dateien
+- `_load_gitignore()`: Liest und kompiliert .gitignore mit `pathspec.PathSpec.from_lines("gitwildmatch", ...)`
+- `_should_ignore()` erweitert: Prüft IGNORED_DIRS, IGNORED_FILES, dann PathSpec
+- Directories erhalten trailing `/` für korrekte Pattern-Matching
+- 21/21 Tests bestanden, 100% Coverage für `tree.py`
+
+### #033 - 2025-12-12 00:15
+**Aktion:** Test für estimated_tokens Formel hinzugefügt
+**Warum:** Verifikationskommentar forderte Test, der Formel `int(len(tree_string) / 3.5)` explizit prüft
+**Ergebnis:**
+- `test_estimated_tokens_matches_formula` NEU:
+  - Erstellt deterministische Baumstruktur (2 Dateien)
+  - Verifiziert: `result.estimated_tokens == int(len(result.tree_string) / 3.5)`
+  - Sanity-Checks: tokens > 0, tokens < string length
+- 22/22 Tests bestanden, 100% Coverage für `tree.py`
+
+### #034 - 2025-12-12 00:30
+**Aktion:** TreeReport Export in scout/__init__.py hinzugefügt
+**Warum:** Plan Step 3 forderte Export von TreeReport aus dem scout Package
+**Ergebnis:**
+- `from codemap.scout.models import TreeReport` hinzugefügt
+- `__all__ = ["TreeGenerator", "TreeReport"]`
+- Module Docstring erweitert
+- 41/41 Tests bestanden, 100% Coverage
+
+### #035 - 2025-12-12 00:45
+**Aktion:** TreeGenerator Instanzzustand entfernt (Stateless Refactoring)
+**Warum:** Verifikationskommentar: `_file_count`, `_folder_count`, `_root_path`, `_gitignore_spec` als Instanzfelder erschweren parallele/reentrant Nutzung
+**Ergebnis:**
+- `__init__()` enthält keine Felder mehr
+- `generate()` nutzt lokale `stats: dict[str, int]` und `gitignore_spec`
+- `_generate_tree(path, prefix, root_path, gitignore_spec, stats)` erhält alle Parameter
+- `_should_ignore(path, root_path, gitignore_spec)` erhält alle Parameter
+- Thread-safe und reentrant nutzbar
+- 41/41 Tests bestanden, 100% Coverage
+
+### #036 - 2025-12-12 01:00
+**Aktion:** Windows-Pfadnormalisierung für .gitignore-Matching
+**Warum:** Verifikationskommentar: Backslashes (Windows) könnten falsche Matches ergeben
+**Ergebnis:**
+- `_should_ignore()`: `pattern_path = str(relative_path).replace("\\", "/")`
+- Trailing Slash für Directories nach Normalisierung hinzugefügt
+- Cross-Platform-Kompatibilität für Windows-Pfade sichergestellt
+- 41/41 Tests bestanden, 100% Coverage
+
+### #037 - 2025-12-12 01:15
+**Aktion:** Fehlerbehandlung für .gitignore-Lesen hinzugefügt
+**Warum:** Verifikationskommentar: PermissionError oder Encoding-Probleme könnten Traversierung abbrechen
+**Ergebnis:**
+- `_load_gitignore()`: try/except für `OSError` und `UnicodeError`
+- Bei Fehler wird `None` zurückgegeben (keine .gitignore-Filterung)
+- TODO-Kommentar für zukünftiges Logging hinzugefügt
+- `test_gitignore_unreadable_continues_traversal` NEU: Verifiziert graceful degradation
+- 42/42 Tests bestanden, 100% Coverage
+
+### #038 - 2025-12-12 01:30
+**Aktion:** Fehlerbehandlung für iterdir() bei Permission-Fehlern
+**Warum:** Verifikationskommentar: PermissionError bei iterdir() könnte Traversierung abbrechen
+**Ergebnis:**
+- `_generate_tree()`: try/except für `OSError` um `path.iterdir()`
+- Bei Fehler wird leere Liste zurückgegeben (Verzeichnis wird still übersprungen)
+- Kommentar: "Silently skip directories that cannot be read"
+- `test_generate_skips_unreadable_directory` NEU: Verifiziert graceful degradation
+- 43/43 Tests bestanden, 100% Coverage

@@ -79,10 +79,10 @@ show_error_codes = true
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-select = ["E", "F", "I", "N", "W"]
 fix = true
 
 [tool.ruff.lint]
+select = ["E", "F", "I", "N", "W"]
 ignore = []
 
 [tool.ruff.format]
