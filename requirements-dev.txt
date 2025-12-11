@@ -1,0 +1,16 @@
+# Core Dependencies
+pydantic>=2.0.0
+tree-sitter>=0.20.0
+tree-sitter-language-pack
+pathspec
+
+# TDD/QA Tools
+pytest
+pytest-cov
+pytest-sugar
+ruff
+mypy
+
+# Documentation
+mkdocs-material
+mkdocstrings[python]
