@@ -353,3 +353,81 @@
 - `test_factory_returns_protocol_conformant_provider` NEU: Demonstriert Protocol-Konformität mit Hilfsfunktion `use_provider(provider: LLMProvider)`
 - `MockProvider.send`: Parameternamen von `_system`/`_user` zu `system`/`user` geändert (konsistent mit Protocol)
 - 49 Tests bestanden, 100% Coverage für codemap.core, mypy clean
+
+## Phase 4: StructureAdvisor - LLM-basierte Verzeichnisanalyse
+
+### #040 - 2025-12-12 16:30
+**Aktion:** StructureAdvisor mit Dependency Injection implementiert (TDD)
+**Warum:** Plan 03 erfordert LLM-basierte Analyse von TreeReport zur Identifikation von Non-Source-Dateien
+**Ergebnis:**
+- `src/codemap/scout/advisor.py` NEU:
+  - `SYSTEM_PROMPT`: Modul-Level-Konstante für LLM-Anweisungen (German)
+  - `StructureAdvisor.__init__(provider: LLMProvider)`: Constructor-based DI
+  - `StructureAdvisor.analyze(report: TreeReport) -> list[str]`: Analysemethode
+  - Prompt-Format: System-Prompt + `f"Hier ist der Dateibaum:\n\n{report.tree_string}"`
+  - Response-Parsing: Markdown-Code-Blocks entfernen, Zeilen splitten, leere filtern
+- `tests/unit/scout/test_advisor.py` NEU: 27 Tests in 6 Klassen
+  - TestStructureAdvisorInitialization (5): Klassenerstellung, Provider-Storage, Protocol-Conformance
+  - TestStructureAdvisorAnalyzeMethod (9): Clean Response, Markdown-Parsing, Empty/Whitespace
+  - TestStructureAdvisorPromptConstruction (3): System/User-Prompt-Verifikation
+  - TestStructureAdvisorSystemPromptConstant (4): Konstanten-Validierung
+  - TestStructureAdvisorDocumentation (4): Docstring-Prüfung
+  - TestStructureAdvisorTypeHints (2): Annotation-Verifikation
+- `src/codemap/scout/__init__.py`: `StructureAdvisor` zu `__all__` hinzugefügt
+- Code-Review: APPROVED (95/100), Minor Issues behoben:
+  - Test-Naming: `test_analyze_strips_prefix_text` → `test_analyze_preserves_prefix_text`
+  - Kosmetische Leerzeilen entfernt
+- 27/27 Tests bestanden, 100% Coverage für advisor.py, mypy clean, ruff clean
+
+### #041 - 2025-12-12 19:15
+**Aktion:** API-Kontrakt für analyze() präzisiert und Parsing erweitert
+**Warum:** Verifikationskommentar: SYSTEM_PROMPT fordert "NUR Pfade", aber analyze() behielt Präfix-Text bei
+**Ergebnis:**
+- `advisor.py`:
+  - Docstring präzisiert: "return list of valid gitignore patterns only"
+  - `_is_valid_pattern(line)` NEU: Heuristik für gültige Patterns (slash, asterisk, dot-prefix, no-space)
+  - Erklärende Zeilen wie "Hier ist die Liste:" werden jetzt gefiltert
+- `test_advisor.py`:
+  - `test_analyze_preserves_prefix_text` → `test_analyze_filters_prefix_text` (Assertion invertiert)
+  - `test_analyze_complex_response_with_markdown_and_prefix`: Erwartet nur Patterns, nicht Präfix
+  - `test_analyze_accepts_simple_filenames_without_pattern_chars` NEU: Testet `Makefile`, `LICENSE`
+- 28/28 Tests bestanden, 100% Coverage für advisor.py
+
+### #042 - 2025-12-12 19:45
+**Aktion:** Robustes Parsing für Bullet-Listen und nummerierte Listen
+**Warum:** Verifikationskommentar: LLMs geben oft "- node_modules/" oder "1. dist/" zurück
+**Ergebnis:**
+- `advisor.py`:
+  - `import re` hinzugefügt
+  - Kommentarzeilen (beginnend mit `#`) werden gefiltert
+  - `_normalize_line(line)` NEU:
+    - `^[-*](?:\s+|$)` entfernt Bullet-Punkte (- oder *)
+    - `^\d+\.(?:\s+|$)` entfernt nummerierte Präfixe (1., 2., etc.)
+  - Docstring: Schritt 4 "Normalizing lines" hinzugefügt
+- `test_advisor.py`:
+  - `test_analyze_normalizes_bullet_list_with_dash` NEU
+  - `test_analyze_normalizes_bullet_list_with_asterisk` NEU
+  - `test_analyze_normalizes_numbered_list` NEU
+  - `test_analyze_filters_comment_lines` NEU
+  - `test_analyze_mixed_formatting` NEU
+  - `test_analyze_filters_empty_bullet_points` NEU
+- 34/34 Tests bestanden, 100% Coverage für advisor.py
+
+### #043 - 2025-12-12 20:00
+**Aktion:** Dedizierter TestMockProvider im Testfile erstellt
+**Warum:** Verifikationskommentar: Plan forderte Test-eigenen MockProvider statt Abhängigkeit von codemap.core.llm
+**Ergebnis:**
+- `test_advisor.py`:
+  - Import `from codemap.core.llm import MockProvider` entfernt
+  - `TestMockProvider` Klasse NEU (außerhalb der Testklassen):
+    - `__test__ = False` (verhindert Pytest-Collection)
+    - `send(system, user) -> str`: Deterministisch "node_modules/\ndist/\n.venv/"
+    - Prompt-Tracking via `last_system_prompt`, `last_user_prompt`
+    - Umfassende Docstring mit Beispiel
+  - 4 Tests aktualisiert: `MockProvider()` → `TestMockProvider()`
+    - `test_structure_advisor_init_with_provider`
+    - `test_structure_advisor_stores_provider`
+    - `test_analyze_method_exists`
+    - `test_analyze_has_docstring`
+  - Spezialisierte Provider (`CleanProvider`, `MarkdownProvider`, etc.) beibehalten
+- 34/34 Tests bestanden, 100% Coverage für advisor.py, keine Pytest-Warnungen

@@ -8,8 +8,57 @@ to identify non-source files/folders using LLM provider. Tests cover:
 - Prompt construction verification
 """
 
-from codemap.core.llm import MockProvider
 from codemap.scout.models import TreeReport
+
+
+class TestMockProvider:
+    """Test-double implementation of LLMProvider for deterministic testing.
+
+    This mock provider returns a predefined, deterministic response in
+    .gitignore format. It is used as the standard stub for generic
+    initialization and documentation tests, ensuring tests do not depend
+    on the behavior of the global MockProvider in codemap.core.llm.
+
+    The response contains typical gitignore patterns that would be returned
+    by a real LLM when analyzing a project structure.
+
+    Attributes:
+        last_system_prompt: The last system prompt passed to send().
+        last_user_prompt: The last user prompt passed to send().
+
+    Example:
+        >>> provider = TestMockProvider()
+        >>> result = provider.send("system prompt", "user prompt")
+        >>> print(result)
+        node_modules/
+        dist/
+        .venv/
+    """
+
+    __test__ = False  # Prevent pytest from collecting this as a test class
+
+    def __init__(self) -> None:
+        """Initialize TestMockProvider with empty prompt tracking."""
+        self.last_system_prompt: str | None = None
+        self.last_user_prompt: str | None = None
+
+    def send(self, system: str, user: str) -> str:
+        """Return a deterministic gitignore-format response.
+
+        Stores the prompts for later verification and returns a fixed
+        set of typical gitignore patterns.
+
+        Args:
+            system: System prompt (stored for verification).
+            user: User prompt (stored for verification).
+
+        Returns:
+            A deterministic string with typical gitignore patterns:
+            "node_modules/\\ndist/\\n.venv/"
+        """
+        self.last_system_prompt = system
+        self.last_user_prompt = user
+        return "node_modules/\ndist/\n.venv/"
 
 
 class TestStructureAdvisorInitialization:
@@ -36,7 +85,7 @@ class TestStructureAdvisorInitialization:
         # Arrange
         from codemap.scout.advisor import StructureAdvisor
 
-        provider = MockProvider()
+        provider = TestMockProvider()
 
         # Act
         advisor = StructureAdvisor(provider)
@@ -49,7 +98,7 @@ class TestStructureAdvisorInitialization:
         # Arrange
         from codemap.scout.advisor import StructureAdvisor
 
-        provider = MockProvider()
+        provider = TestMockProvider()
 
         # Act
         advisor = StructureAdvisor(provider)
@@ -86,7 +135,7 @@ class TestStructureAdvisorAnalyzeMethod:
         # Arrange
         from codemap.scout.advisor import StructureAdvisor
 
-        provider = MockProvider()
+        provider = TestMockProvider()
         advisor = StructureAdvisor(provider)
 
         # Assert
@@ -178,8 +227,8 @@ class TestStructureAdvisorAnalyzeMethod:
         assert "node_modules/" in result
         assert ".venv/" in result
 
-    def test_analyze_preserves_prefix_text(self) -> None:
-        """Test analyze preserves non-empty prefix text from LLM response."""
+    def test_analyze_filters_prefix_text(self) -> None:
+        """Test analyze filters out explanatory prefix text from LLM response."""
         # Arrange
         from codemap.scout.advisor import StructureAdvisor
 
@@ -201,10 +250,11 @@ class TestStructureAdvisorAnalyzeMethod:
 
         # Assert
         assert isinstance(result, list)
-        # Should include prefix as first line, then patterns
-        assert "Hier ist die Liste:" in result
+        # Should only include valid patterns, not explanatory text
+        assert "Hier ist die Liste:" not in result
         assert "node_modules/" in result
         assert "dist/" in result
+        assert len(result) == 2
 
     def test_analyze_filters_empty_lines(self) -> None:
         """Test analyze filters out empty lines."""
@@ -234,6 +284,34 @@ class TestStructureAdvisorAnalyzeMethod:
         assert "node_modules/" in result
         assert "dist/" in result
         assert ".venv/" in result
+
+    def test_analyze_accepts_simple_filenames_without_pattern_chars(self) -> None:
+        """Test analyze accepts simple filenames without slash/asterisk/dot prefix."""
+        # Arrange
+        from codemap.scout.advisor import StructureAdvisor
+
+        class SimpleNameProvider:
+            def send(self, system: str, user: str) -> str:
+                return "Makefile\nLICENSE\nDockerfile"
+
+        provider = SimpleNameProvider()
+        advisor = StructureAdvisor(provider)
+        report = TreeReport(
+            tree_string="project/",
+            total_files=0,
+            total_folders=0,
+            estimated_tokens=2,
+        )
+
+        # Act
+        result = advisor.analyze(report)
+
+        # Assert
+        assert isinstance(result, list)
+        assert len(result) == 3
+        assert "Makefile" in result
+        assert "LICENSE" in result
+        assert "Dockerfile" in result
 
     def test_analyze_empty_response_returns_empty_list(self) -> None:
         """Test analyze returns empty list for empty response."""
@@ -315,13 +393,204 @@ class TestStructureAdvisorAnalyzeMethod:
 
         # Assert
         assert isinstance(result, list)
-        # Should contain prefix and patterns, but not markdown markers
-        assert "Hier ist die Liste der zu ignorierenden Pfade:" in result
+        # Should contain only valid patterns, not prefix or markdown markers
+        assert "Hier ist die Liste der zu ignorierenden Pfade:" not in result
         assert "node_modules/" in result
         assert "dist/" in result
         assert ".venv/" in result
         assert "```gitignore" not in result
         assert "```" not in result
+        assert len(result) == 3
+
+    def test_analyze_normalizes_bullet_list_with_dash(self) -> None:
+        """Test analyze removes leading dash bullet points from patterns."""
+        # Arrange
+        from codemap.scout.advisor import StructureAdvisor
+
+        class BulletDashProvider:
+            def send(self, system: str, user: str) -> str:
+                return "- node_modules/\n- dist/\n- .venv/"
+
+        provider = BulletDashProvider()
+        advisor = StructureAdvisor(provider)
+        report = TreeReport(
+            tree_string="project/",
+            total_files=0,
+            total_folders=0,
+            estimated_tokens=2,
+        )
+
+        # Act
+        result = advisor.analyze(report)
+
+        # Assert
+        assert isinstance(result, list)
+        assert len(result) == 3
+        assert "node_modules/" in result
+        assert "dist/" in result
+        assert ".venv/" in result
+        # Ensure bullet points are removed
+        assert "- node_modules/" not in result
+
+    def test_analyze_normalizes_bullet_list_with_asterisk(self) -> None:
+        """Test analyze removes leading asterisk bullet points from patterns."""
+        # Arrange
+        from codemap.scout.advisor import StructureAdvisor
+
+        class BulletAsteriskProvider:
+            def send(self, system: str, user: str) -> str:
+                return "* node_modules/\n* dist/\n* .venv/"
+
+        provider = BulletAsteriskProvider()
+        advisor = StructureAdvisor(provider)
+        report = TreeReport(
+            tree_string="project/",
+            total_files=0,
+            total_folders=0,
+            estimated_tokens=2,
+        )
+
+        # Act
+        result = advisor.analyze(report)
+
+        # Assert
+        assert isinstance(result, list)
+        assert len(result) == 3
+        assert "node_modules/" in result
+        assert "dist/" in result
+        assert ".venv/" in result
+        # Ensure bullet points are removed
+        assert "* node_modules/" not in result
+
+    def test_analyze_normalizes_numbered_list(self) -> None:
+        """Test analyze removes numbered list prefixes from patterns."""
+        # Arrange
+        from codemap.scout.advisor import StructureAdvisor
+
+        class NumberedListProvider:
+            def send(self, system: str, user: str) -> str:
+                return "1. node_modules/\n2. dist/\n3. .venv/\n10. __pycache__/"
+
+        provider = NumberedListProvider()
+        advisor = StructureAdvisor(provider)
+        report = TreeReport(
+            tree_string="project/",
+            total_files=0,
+            total_folders=0,
+            estimated_tokens=2,
+        )
+
+        # Act
+        result = advisor.analyze(report)
+
+        # Assert
+        assert isinstance(result, list)
+        assert len(result) == 4
+        assert "node_modules/" in result
+        assert "dist/" in result
+        assert ".venv/" in result
+        assert "__pycache__/" in result
+        # Ensure numbered prefixes are removed
+        assert "1. node_modules/" not in result
+        assert "10. __pycache__/" not in result
+
+    def test_analyze_filters_comment_lines(self) -> None:
+        """Test analyze filters out comment lines starting with #."""
+        # Arrange
+        from codemap.scout.advisor import StructureAdvisor
+
+        class CommentProvider:
+            def send(self, system: str, user: str) -> str:
+                return "# This is a comment\nnode_modules/\n# Another comment\ndist/"
+
+        provider = CommentProvider()
+        advisor = StructureAdvisor(provider)
+        report = TreeReport(
+            tree_string="project/",
+            total_files=0,
+            total_folders=0,
+            estimated_tokens=2,
+        )
+
+        # Act
+        result = advisor.analyze(report)
+
+        # Assert
+        assert isinstance(result, list)
+        assert len(result) == 2
+        assert "node_modules/" in result
+        assert "dist/" in result
+        # Ensure comment lines are filtered out
+        assert "# This is a comment" not in result
+        assert "# Another comment" not in result
+
+    def test_analyze_mixed_formatting(self) -> None:
+        """Test analyze handles mixed formatting styles correctly."""
+        # Arrange
+        from codemap.scout.advisor import StructureAdvisor
+
+        class MixedFormattingProvider:
+            def send(self, system: str, user: str) -> str:
+                return (
+                    "Hier sind die Pfade:\n"
+                    "- node_modules/\n"
+                    "1. dist/\n"
+                    "* .venv/\n"
+                    "# Comment\n"
+                    "__pycache__/"
+                )
+
+        provider = MixedFormattingProvider()
+        advisor = StructureAdvisor(provider)
+        report = TreeReport(
+            tree_string="project/",
+            total_files=0,
+            total_folders=0,
+            estimated_tokens=2,
+        )
+
+        # Act
+        result = advisor.analyze(report)
+
+        # Assert
+        assert isinstance(result, list)
+        assert len(result) == 4
+        assert "node_modules/" in result
+        assert "dist/" in result
+        assert ".venv/" in result
+        assert "__pycache__/" in result
+        # Ensure formatting artifacts are removed
+        assert "Hier sind die Pfade:" not in result
+        assert "# Comment" not in result
+
+    def test_analyze_filters_empty_bullet_points(self) -> None:
+        """Test analyze filters out empty bullet points after normalization."""
+        # Arrange
+        from codemap.scout.advisor import StructureAdvisor
+
+        class EmptyBulletProvider:
+            def send(self, system: str, user: str) -> str:
+                return "- \n-\n* \n1. \nnode_modules/\ndist/"
+
+        provider = EmptyBulletProvider()
+        advisor = StructureAdvisor(provider)
+        report = TreeReport(
+            tree_string="project/",
+            total_files=0,
+            total_folders=0,
+            estimated_tokens=2,
+        )
+
+        # Act
+        result = advisor.analyze(report)
+
+        # Assert
+        assert isinstance(result, list)
+        assert len(result) == 2
+        assert "node_modules/" in result
+        assert "dist/" in result
+        # Ensure empty bullets are filtered out
+        assert "" not in result
 
 
 class TestStructureAdvisorPromptConstruction:
@@ -488,7 +757,7 @@ class TestStructureAdvisorDocumentation:
         # Arrange
         from codemap.scout.advisor import StructureAdvisor
 
-        provider = MockProvider()
+        provider = TestMockProvider()
         advisor = StructureAdvisor(provider)
 
         # Assert
