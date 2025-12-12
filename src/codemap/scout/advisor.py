@@ -5,10 +5,13 @@ TreeReport objects and identify non-source files/folders. The class accepts
 LLMProvider via dependency injection for testability and flexibility.
 """
 
+import logging
 import re
 
 from codemap.core.llm import LLMProvider
 from codemap.scout.models import TreeReport
+
+logger = logging.getLogger(__name__)
 
 # System prompt for LLM to analyze directory structures
 SYSTEM_PROMPT: str = (
@@ -79,7 +82,11 @@ class StructureAdvisor:
             List of valid gitignore-style patterns identifying files/folders to ignore.
             Only patterns with typical gitignore characteristics are included.
             Explanatory text from LLM responses is filtered out.
-            Empty list if LLM returns empty or whitespace-only response.
+            Empty list if LLM returns empty or whitespace-only response,
+            or if an API error occurs (ValueError from provider).
+
+        Raises:
+            No exceptions are raised; API errors result in empty list return.
 
         Example:
             >>> advisor = StructureAdvisor(MockProvider())
@@ -96,8 +103,12 @@ class StructureAdvisor:
         # Construct user prompt with tree structure
         user_prompt = f"Hier ist der Dateibaum:\n\n{report.tree_string}"
 
-        # Call LLM provider
-        response = self._provider.send(SYSTEM_PROMPT, user_prompt)
+        # Call LLM provider with error handling for API failures
+        try:
+            response = self._provider.send(SYSTEM_PROMPT, user_prompt)
+        except ValueError as e:
+            logger.warning("LLM provider returned invalid response: %s", e)
+            return []
 
         # Parse response: strip markdown code blocks and filter empty lines
         lines = response.strip().split("\n")

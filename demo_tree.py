@@ -28,7 +28,7 @@ def main():
         report = generator.generate(root_path)
     except Exception as e:
         print(f"💥 Kritischer Fehler beim Scannen: {e}")
-        return
+        sys.exit(1)
 
     duration = time.time() - start_time
 

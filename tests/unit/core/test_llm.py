@@ -9,7 +9,9 @@ all LLM provider implementations. Tests cover:
 - Comprehensive docstring presence
 """
 
+import os
 from typing import Protocol, get_type_hints
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -264,7 +266,9 @@ class TestMockProvider:
 class TestCerebrasProvider:
     """Test suite for CerebrasProvider stub implementation."""
 
-    def test_cerebras_provider_exists(self) -> None:
+    @patch.dict(os.environ, {"CEREBRAS_API_KEY": "test-key"}, clear=True)
+    @patch("codemap.core.llm.OpenAI")
+    def test_cerebras_provider_exists(self, mock_openai_cls: MagicMock) -> None:
         """Test that CerebrasProvider class exists and can be instantiated."""
         # Act
         provider = CerebrasProvider()
@@ -279,15 +283,50 @@ class TestCerebrasProvider:
         assert hasattr(CerebrasProvider, "__init__")
         assert callable(getattr(CerebrasProvider, "__init__"))
 
-    def test_cerebras_provider_init_no_parameters(self) -> None:
-        """Test that CerebrasProvider.__init__ can be called with no parameters."""
+    @patch.dict(os.environ, {"CEREBRAS_API_KEY": "test-key"}, clear=True)
+    @patch("codemap.core.llm.OpenAI")
+    def test_cerebras_provider_init_requires_api_key(self, mock_openai_cls: MagicMock) -> None:
+        """Test that CerebrasProvider can be instantiated when API key is set."""
+        # Arrange
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+
         # Act
         provider = CerebrasProvider()
 
         # Assert - Should instantiate without errors
         assert provider is not None
 
-    def test_cerebras_provider_has_send_method(self) -> None:
+        # Verify OpenAI client is initialized with correct parameters
+        mock_openai_cls.assert_called_once_with(
+            api_key="test-key",
+            base_url="https://api.cerebras.ai/v1"
+        )
+
+        # Verify model is set to "llama3.1-70b"
+        assert provider.model == "llama3.1-70b"
+
+    @patch.dict(os.environ, {}, clear=True)
+    def test_cerebras_provider_init_missing_api_key(self) -> None:
+        """Test that CerebrasProvider raises ValueError when API key is missing."""
+        # Act & Assert
+        with pytest.raises(ValueError) as exc_info:
+            CerebrasProvider()
+
+        assert str(exc_info.value) == "CEREBRAS_API_KEY environment variable not set"
+
+    @patch.dict(os.environ, {"CEREBRAS_API_KEY": ""}, clear=True)
+    def test_cerebras_provider_init_empty_api_key(self) -> None:
+        """Test that CerebrasProvider raises ValueError when API key is empty."""
+        # Act & Assert
+        with pytest.raises(ValueError) as exc_info:
+            CerebrasProvider()
+
+        assert str(exc_info.value) == "CEREBRAS_API_KEY environment variable not set"
+
+    @patch.dict(os.environ, {"CEREBRAS_API_KEY": "test-key"}, clear=True)
+    @patch("codemap.core.llm.OpenAI")
+    def test_cerebras_provider_has_send_method(self, mock_openai_cls: MagicMock) -> None:
         """Test that CerebrasProvider has send method."""
         # Arrange
         provider = CerebrasProvider()
@@ -312,20 +351,46 @@ class TestCerebrasProvider:
         assert "return" in type_hints
         assert type_hints["return"] is str
 
-    def test_cerebras_provider_send_raises_not_implemented_error(self) -> None:
-        """Test that send method raises NotImplementedError with specific message."""
+    @patch.dict(os.environ, {"CEREBRAS_API_KEY": "test-key"}, clear=True)
+    @patch("codemap.core.llm.OpenAI")
+    def test_cerebras_provider_send_calls_openai_api(self, mock_openai_cls: MagicMock) -> None:
+        """Test that send method calls OpenAI API with correct parameters."""
         # Arrange
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+
+        # Create mock response structure
+        mock_message = MagicMock()
+        mock_message.content = "mocked response"
+        mock_choice = MagicMock()
+        mock_choice.message = mock_message
+        mock_response = MagicMock()
+        mock_response.choices = [mock_choice]
+
+        mock_client.chat.completions.create.return_value = mock_response
+
         provider = CerebrasProvider()
 
-        # Act & Assert
-        try:
-            provider.send("system prompt", "user prompt")
-            assert False, "Expected NotImplementedError to be raised"
-        except NotImplementedError as e:
-            # Verify the error message is exactly as specified
-            assert str(e) == "CerebrasProvider not yet implemented"
+        # Act
+        result = provider.send("system prompt", "user prompt")
 
-    def test_cerebras_provider_conforms_to_protocol(self) -> None:
+        # Assert
+        # Verify chat.completions.create was called with correct parameters
+        mock_client.chat.completions.create.assert_called_once_with(
+            model="llama3.1-70b",
+            messages=[
+                {"role": "system", "content": "system prompt"},
+                {"role": "user", "content": "user prompt"}
+            ],
+            temperature=0.2
+        )
+
+        # Verify returned value is "mocked response"
+        assert result == "mocked response"
+
+    @patch.dict(os.environ, {"CEREBRAS_API_KEY": "test-key"}, clear=True)
+    @patch("codemap.core.llm.OpenAI")
+    def test_cerebras_provider_conforms_to_protocol(self, mock_openai_cls: MagicMock) -> None:
         """Test that CerebrasProvider conforms to LLMProvider Protocol."""
         # Arrange
         provider = CerebrasProvider()
@@ -339,10 +404,10 @@ class TestCerebrasProvider:
         # Assert
         assert CerebrasProvider.__doc__ is not None
         assert len(CerebrasProvider.__doc__.strip()) > 0
-        # Verify key docstring components (German, mentions stub and Cerebras)
+        # Verify key docstring components (mentions Cerebras and API)
         doc = CerebrasProvider.__doc__.lower()
         assert "cerebras" in doc
-        assert "stub" in doc or "platzhalter" in doc or "vorbereitung" in doc
+        assert "api" in doc
 
     def test_cerebras_provider_send_has_docstring(self) -> None:
         """Test that send method has comprehensive docstring."""
@@ -352,9 +417,9 @@ class TestCerebrasProvider:
         # Assert
         assert send_method.__doc__ is not None
         assert len(send_method.__doc__.strip()) > 0
-        # Verify mentions NotImplementedError
+        # Verify mentions API or Cerebras
         doc = send_method.__doc__.lower()
-        assert "notimplementederror" in doc or "not implemented" in doc
+        assert "api" in doc or "cerebras" in doc
 
 
 
@@ -387,7 +452,9 @@ class TestGetProviderFactory:
         assert hasattr(provider, "send")
         assert callable(provider.send)
 
-    def test_get_provider_cerebras_returns_cerebras_provider(self) -> None:
+    @patch.dict(os.environ, {"CEREBRAS_API_KEY": "test-key"}, clear=True)
+    @patch("codemap.core.llm.OpenAI")
+    def test_get_provider_cerebras_returns_cerebras_provider(self, mock_openai_cls: MagicMock) -> None:
         """Test that get_provider('cerebras') returns CerebrasProvider instance."""
         # Act
         provider = get_provider("cerebras")
@@ -497,17 +564,34 @@ class TestGetProviderFactory:
         assert isinstance(result, str)
         assert "node_modules/" in result
 
-    def test_get_provider_returned_cerebras_raises_not_implemented(self) -> None:
-        """Test that CerebrasProvider instance returned by factory raises error."""
+    @patch.dict(os.environ, {"CEREBRAS_API_KEY": "test-key"}, clear=True)
+    @patch("codemap.core.llm.OpenAI")
+    def test_get_provider_returned_cerebras_works_with_mock(self, mock_openai_cls: MagicMock) -> None:
+        """Test that CerebrasProvider instance returned by factory works with mocked API."""
+        # Arrange
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+
+        # Create mock response structure
+        mock_message = MagicMock()
+        mock_message.content = "mocked response"
+        mock_choice = MagicMock()
+        mock_choice.message = mock_message
+        mock_response = MagicMock()
+        mock_response.choices = [mock_choice]
+
+        mock_client.chat.completions.create.return_value = mock_response
+
         # Act
         provider = get_provider("cerebras")
+        result = provider.send("system", "user")
 
         # Assert
-        with pytest.raises(NotImplementedError) as exc_info:
-            provider.send("system", "user")
-        assert "CerebrasProvider not yet implemented" == str(exc_info.value)
+        assert result == "mocked response"
 
-    def test_factory_returns_protocol_conformant_provider(self) -> None:
+    @patch.dict(os.environ, {"CEREBRAS_API_KEY": "test-key"}, clear=True)
+    @patch("codemap.core.llm.OpenAI")
+    def test_factory_returns_protocol_conformant_provider(self, mock_openai_cls: MagicMock) -> None:
         """Test that get_provider returns objects conforming to LLMProvider protocol.
 
         This test demonstrates that the static type LLMProvider is correct for
@@ -526,7 +610,21 @@ class TestGetProviderFactory:
         assert isinstance(result, str)
         assert len(result) > 0
 
-        # Act & Assert - CerebrasProvider raises expected error through protocol
+        # Arrange - Mock OpenAI client for CerebrasProvider
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+
+        # Create mock response structure
+        mock_message = MagicMock()
+        mock_message.content = "cerebras mocked response"
+        mock_choice = MagicMock()
+        mock_choice.message = mock_message
+        mock_response = MagicMock()
+        mock_response.choices = [mock_choice]
+
+        mock_client.chat.completions.create.return_value = mock_response
+
+        # Act & Assert - CerebrasProvider works through protocol interface
         cerebras_provider = get_provider("cerebras")
-        with pytest.raises(NotImplementedError):
-            use_provider(cerebras_provider)
+        cerebras_result = use_provider(cerebras_provider)
+        assert cerebras_result == "cerebras mocked response"

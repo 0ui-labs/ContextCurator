@@ -592,6 +592,38 @@ class TestStructureAdvisorAnalyzeMethod:
         # Ensure empty bullets are filtered out
         assert "" not in result
 
+    def test_analyze_returns_empty_list_on_provider_value_error(self) -> None:
+        """Test that analyze returns empty list when provider raises ValueError.
+
+        When the LLM provider raises a ValueError (e.g., empty API response,
+        null content), the analyze method should catch the exception, log a
+        warning, and return an empty list instead of propagating the error.
+        """
+        # Arrange
+        from codemap.scout.advisor import StructureAdvisor
+
+        class ErrorProvider:
+            """Provider that raises ValueError to simulate API failure."""
+
+            def send(self, system: str, user: str) -> str:
+                raise ValueError("Empty response from Cerebras API")
+
+        provider = ErrorProvider()
+        advisor = StructureAdvisor(provider)
+        report = TreeReport(
+            tree_string="project/",
+            total_files=0,
+            total_folders=0,
+            estimated_tokens=2,
+        )
+
+        # Act
+        result = advisor.analyze(report)
+
+        # Assert
+        assert isinstance(result, list)
+        assert len(result) == 0
+
 
 class TestStructureAdvisorPromptConstruction:
     """Test suite for verifying prompt construction in analyze method."""

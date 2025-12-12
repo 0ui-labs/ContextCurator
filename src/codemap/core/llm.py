@@ -4,7 +4,10 @@ Definiert das Interface für alle LLM-Provider-Implementierungen.
 Ermöglicht Dependency Injection und einfaches Testen mit Mocks.
 """
 
+import os
 from typing import Protocol
+
+from openai import OpenAI
 
 
 class LLMProvider(Protocol):
@@ -65,41 +68,78 @@ class MockProvider:
 
 
 class CerebrasProvider:
-    """Stub-Implementierung für künftige Cerebras-API-Integration.
+    """Cerebras-API-Integration für LLM-Inferenz.
 
-    Diese Platzhalter-Implementierung bereitet die Integration der
-    Cerebras-API vor. Aktuell wirft die send-Methode NotImplementedError.
-    Der Stub dient als strukturelle Vorbereitung für die spätere
-    Anbindung der echten Cerebras-API mit API-Schlüssel-Authentifizierung.
+    Diese Implementierung bindet die Cerebras-API über das OpenAI-kompatible
+    Interface an. Sie verwendet den llama3.1-70b-Modell für schnelle und
+    qualitativ hochwertige Inferenz.
 
-    Verwendungszweck:
-        - Strukturelle Vorbereitung für Cerebras-Integration
-        - Signalisiert geplante künftige Implementierung
-        - Ermöglicht frühzeitige Architektur-Planung
+    Die Klasse liest den API-Schlüssel aus der Umgebungsvariable
+    CEREBRAS_API_KEY und initialisiert einen OpenAI-Client mit der
+    Cerebras-API-Base-URL.
 
-    Note:
-        Diese Klasse ist noch nicht funktionsfähig und dient nur als Stub.
-        Die echte API-Integration erfolgt in einer späteren Phase.
+    Attributes:
+        client: OpenAI-Client konfiguriert für Cerebras-API.
+        model: Name des verwendeten Modells (llama3.1-70b).
+
+    Raises:
+        ValueError: Wenn CEREBRAS_API_KEY nicht gesetzt ist.
     """
 
-    def send(self, system: str, user: str) -> str:
-        """Wirft NotImplementedError - Stub für künftige Cerebras-API-Calls.
+    def __init__(self) -> None:
+        """Initialisiert den CerebrasProvider mit API-Key aus Umgebungsvariable.
 
-        Diese Methode ist noch nicht implementiert und wirft immer
-        NotImplementedError. In der echten Implementierung wird hier
-        die Kommunikation mit der Cerebras-API stattfinden.
-
-        Args:
-            system: System-Prompt für Kontext (noch nicht verwendet).
-            user: User-Prompt mit Anfrage (noch nicht verwendet).
-
-        Returns:
-            String-Antwort vom LLM (in echter Implementierung).
+        Liest CEREBRAS_API_KEY aus os.environ und erstellt einen OpenAI-Client
+        mit der Cerebras-API-Base-URL. Setzt das Standard-Modell auf llama3.1-70b.
 
         Raises:
-            NotImplementedError: Immer, da dies nur ein Stub ist.
+            ValueError: Wenn CEREBRAS_API_KEY nicht gesetzt oder leer ist.
         """
-        raise NotImplementedError("CerebrasProvider not yet implemented")
+        api_key = os.environ.get("CEREBRAS_API_KEY")
+        if not api_key:
+            raise ValueError("CEREBRAS_API_KEY environment variable not set")
+        self.client = OpenAI(api_key=api_key, base_url="https://api.cerebras.ai/v1")
+        self.model = "llama3.1-70b"
+
+    def send(self, system: str, user: str) -> str:  # pragma: no cover
+        """Sendet Prompts an Cerebras-API und erhält Antwort.
+
+        Erstellt einen Chat-Completion-Request mit System- und User-Prompts
+        und gibt die generierte Antwort zurück. Verwendet temperature=0.2
+        für präzise, deterministische Antworten.
+
+        Args:
+            system: System-Prompt für Kontext und Verhaltenssteuerung.
+            user: User-Prompt mit konkreter Anfrage.
+
+        Returns:
+            String-Antwort vom LLM.
+
+        Raises:
+            ValueError: Wenn die Cerebras-API eine unerwartete oder leere
+                Antwort zurückgibt. Dies tritt auf bei:
+                - Leerer choices-Liste in der API-Antwort
+                - None-Wert im message.content-Feld
+            openai.APIError: Bei Netzwerk- oder API-Fehlern (von OpenAI-Client).
+
+        Note:
+            Call-Sites sollten ValueError abfangen und geeignete Fallback-
+            oder Logging-Logik implementieren.
+        """
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            temperature=0.2,
+        )
+        if not response.choices:
+            raise ValueError("Empty response from Cerebras API")
+        content = response.choices[0].message.content
+        if content is None:
+            raise ValueError("Null content in Cerebras API response")
+        return content
 
 
 def get_provider(name: str = "mock") -> LLMProvider:
@@ -150,7 +190,7 @@ def get_provider(name: str = "mock") -> LLMProvider:
 
         Verwendung des CerebrasProviders:
             >>> provider = get_provider("cerebras")
-            >>> # Hinweis: Wirft aktuell NotImplementedError, da Stub
+            >>> # Benötigt CEREBRAS_API_KEY Umgebungsvariable
 
         Fehlerbehandlung bei unbekanntem Provider:
             >>> try:

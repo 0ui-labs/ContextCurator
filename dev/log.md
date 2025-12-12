@@ -431,3 +431,76 @@
     - `test_analyze_has_docstring`
   - Spezialisierte Provider (`CleanProvider`, `MarkdownProvider`, etc.) beibehalten
 - 34/34 Tests bestanden, 100% Coverage für advisor.py, keine Pytest-Warnungen
+
+## Phase 5: CerebrasProvider mit OpenAI Client
+
+### #044 - 2025-12-12 21:30
+**Aktion:** OpenAI Dependency zu requirements-dev.txt hinzugefügt
+**Warum:** CerebrasProvider benötigt OpenAI SDK für API-Kommunikation mit OpenAI-kompatibler Schnittstelle
+**Ergebnis:**
+- `requirements-dev.txt`: `openai>=1.0.0` in Core Dependencies Sektion hinzugefügt
+- Drei-Sektionen-Struktur beibehalten (Core Dependencies, TDD/QA Tools, Documentation)
+- Formatierung konsistent mit existierenden Einträgen
+
+### #045 - 2025-12-12 22:00
+**Aktion:** CerebrasProvider mit OpenAI Client implementiert (TDD)
+**Warum:** Plan 02 erfordert echte Cerebras-API-Integration statt Stub; ermöglicht LLM-Inferenz via llama3.1-70b
+**Ergebnis:**
+- `src/codemap/core/llm.py` REFACTORED:
+  - `import os` und `from openai import OpenAI` hinzugefügt
+  - `CerebrasProvider.__init__()`: Liest `CEREBRAS_API_KEY` aus Umgebung, ValueError wenn leer
+  - `CerebrasProvider.send()`: OpenAI-kompatible API-Calls mit temperature=0.2
+  - Defensive Checks: ValueError bei leerer `choices`-Liste oder `None` in `message.content`
+  - `# pragma: no cover` an `send()` für echte API-Calls (nicht in Tests)
+- `tests/unit/core/test_llm.py` REFACTORED:
+  - `import os` und `from unittest.mock import MagicMock, patch` hinzugefügt
+  - 11 Tests in `TestCerebrasProvider` aktualisiert: `@patch.dict` + `@patch("codemap.core.llm.OpenAI")`
+  - `test_cerebras_provider_init_requires_api_key`: Verifiziert OpenAI-Initialisierung
+  - `test_cerebras_provider_init_missing_api_key`, `test_cerebras_provider_init_empty_api_key` NEU
+  - `test_cerebras_provider_send_calls_openai_api` NEU: Mock-Verifizierung der API-Parameter
+  - Docstring-Assertions aktualisiert: "api" statt "stub"
+  - `TestGetProviderFactory`: 3 Tests mit Mocking aktualisiert
+- 128 Tests bestanden, 100% Coverage, mypy clean, ruff clean
+
+### #046 - 2025-12-12 22:15
+**Aktion:** Error-Handling in StructureAdvisor.analyze() hinzugefügt
+**Warum:** Verifikationskommentar: CerebrasProvider.send() kann ValueError werfen, Call-Sites müssen abfangen
+**Ergebnis:**
+- `src/codemap/scout/advisor.py`:
+  - `import logging` und `logger = logging.getLogger(__name__)` hinzugefügt
+  - `analyze()`: try/except ValueError um `_provider.send()` mit Warning-Log
+  - Docstring erweitert: "Empty list if API error occurs"
+- `tests/unit/scout/test_advisor.py`:
+  - `test_analyze_returns_empty_list_on_provider_value_error` NEU
+  - `ErrorProvider` Test-Double wirft ValueError
+- 128 Tests bestanden, 100% Coverage
+
+## Phase 5: Demo-Script für StructureAdvisor
+
+### #047 - 2025-12-12 23:30
+**Aktion:** demo_advisor.py erstellt
+**Warum:** Plan 03 erfordert Demo-Script zum Demonstrieren des vollständigen Workflows (TreeGenerator → StructureAdvisor → LLM-Analyse)
+**Ergebnis:**
+- `demo_advisor.py` NEU im Root-Verzeichnis:
+  - Imports: TreeGenerator, StructureAdvisor, get_provider (Cerebras)
+  - main() mit 5 Phasen: Header, Tree-Scan, Provider-Init, LLM-Analyse, Ergebnisausgabe
+  - Timing-Messungen für Scan und Analyse separat
+  - Emoji-basierte Konsolen-Ausgabe (konsistent mit demo_tree.py)
+  - Statistik-Zusammenfassung: Dateien, Ordner, Patterns, Dauer
+- Error-Handling:
+  - ImportError: sys.exit(1) mit Details
+  - Scan-Fehler: sys.exit(1) mit Fehlermeldung
+  - ValueError (missing API key): sys.exit(1) mit Setup-Tipp
+  - Analyse-Fehler: sys.exit(1) mit Fehlermeldung
+- Syntax-Verifikation: ✅ py_compile erfolgreich
+- Import-Verifikation: ✅ Alle Module gefunden
+- Exit-Code-Verifikation: ✅ Code 1 bei fehlendem CEREBRAS_API_KEY
+
+### #048 - 2025-12-12 23:35
+**Aktion:** Konsistentes Exit-Code-Verhalten für Demo-Scripts
+**Warum:** Verifikationskommentar: Fehlerfälle sollten Exit-Code 1 signalisieren statt still mit return zu enden
+**Ergebnis:**
+- `demo_advisor.py`: 3x `return` → `sys.exit(1)` (Scan-Fehler, API-Key-Fehler, Analyse-Fehler)
+- `demo_tree.py`: 1x `return` → `sys.exit(1)` (Scan-Fehler)
+- Beide Demo-Scripts verhalten sich jetzt konsistent bei Fehlern
+- Verifiziert: Exit-Code 1 bei fehlendem API-Key bestätigt
