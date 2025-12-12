@@ -8,8 +8,6 @@ to identify non-source files/folders using LLM provider. Tests cover:
 - Prompt construction verification
 """
 
-
-
 from codemap.core.llm import MockProvider
 from codemap.scout.models import TreeReport
 
@@ -180,8 +178,8 @@ class TestStructureAdvisorAnalyzeMethod:
         assert "node_modules/" in result
         assert ".venv/" in result
 
-    def test_analyze_strips_prefix_text(self) -> None:
-        """Test analyze strips prefix text before patterns."""
+    def test_analyze_preserves_prefix_text(self) -> None:
+        """Test analyze preserves non-empty prefix text from LLM response."""
         # Arrange
         from codemap.scout.advisor import StructureAdvisor
 
