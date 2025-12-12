@@ -504,3 +504,36 @@
 - `demo_tree.py`: 1x `return` → `sys.exit(1)` (Scan-Fehler)
 - Beide Demo-Scripts verhalten sich jetzt konsistent bei Fehlern
 - Verifiziert: Exit-Code 1 bei fehlendem API-Key bestätigt
+
+## Phase 6: FileEntry Datenmodell
+
+### #049 - 2025-12-13 10:30
+**Aktion:** FileEntry Dataclass implementiert (TDD)
+**Warum:** Plan 01 erfordert immutables Datenmodell für File-Metadaten mit Pfad, Größe und Token-Schätzung
+**Ergebnis:**
+- `src/codemap/scout/models.py` ERWEITERT:
+  - `from pathlib import Path` Import hinzugefügt
+  - `FileEntry` frozen Dataclass mit 3 Attributen:
+    - `path: Path` - Relativer Pfad vom Projekt-Root
+    - `size: int` - Dateigröße in Bytes
+    - `token_est: int` - Token-Schätzung (size / 4)
+  - Docstring im TreeReport-Stil mit Beispiel
+- `tests/unit/scout/test_models.py` NEU:
+  - 6 Tests für FileEntry: Creation, Immutability, Attribute Access, Relative Paths, Equality
+  - 2 Tests für TreeReport (Regression)
+- `tests/unit/scout/test_init.py` NEU:
+  - 4 Tests für Public API Export: FileEntry in __all__, alphabetische Sortierung
+- `src/codemap/scout/__init__.py` ERWEITERT:
+  - `FileEntry` zu Import und `__all__` hinzugefügt
+  - Alphabetische Sortierung: `["FileEntry", "StructureAdvisor", "TreeGenerator", "TreeReport"]`
+- 71/71 Scout-Tests bestanden, 100% Coverage für models.py
+
+### #050 - 2025-12-13 10:45
+**Aktion:** FileEntry Docstring-Korrekturen (Review-Feedback)
+**Warum:** Verifikationskommentare: Docstring behauptete "absolute or relative" aber Plan fordert nur relative Pfade
+**Ergebnis:**
+- `path` Attribut: "Relative file path from the project root as a Path object."
+- Beispiel: `Path("src/main.py")` statt `Path("/project/src/main.py")`
+- `token_est` Attribut: "calculated as size / 4 rounded to int." ergänzt
+- Konsistenz mit TreeReport.estimated_tokens Dokumentationsformat
+- Beispiel-Werte konsistent: size=1024, token_est=256 (1024/4=256)

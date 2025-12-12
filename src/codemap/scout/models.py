@@ -4,6 +4,7 @@ This module contains dataclasses used for structured data representation
 in the scout module, particularly for tree generation reports.
 """
 
+from pathlib import Path
 from dataclasses import dataclass
 
 
@@ -39,3 +40,34 @@ class TreeReport:
     total_files: int
     total_folders: int
     estimated_tokens: int
+
+
+@dataclass(frozen=True)
+class FileEntry:
+    """Immutable representation of a file with metadata for LLM context.
+
+    This frozen dataclass encapsulates information about a single file,
+    including its path, size, and estimated token count for LLM processing.
+    Instances cannot be modified after creation.
+
+    Attributes:
+        path: Relative file path from the project root as a Path object.
+        size: File size in bytes.
+        token_est: Estimated token count for LLM context usage,
+            calculated as size / 4 rounded to int.
+
+    Example:
+        >>> entry = FileEntry(
+        ...     path=Path("src/main.py"),
+        ...     size=1024,
+        ...     token_est=256
+        ... )
+        >>> print(entry.path)
+        src/main.py
+        >>> print(entry.size)
+        1024
+    """
+
+    path: Path
+    size: int
+    token_est: int
