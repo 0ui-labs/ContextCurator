@@ -99,7 +99,7 @@ class CerebrasProvider:
         if not api_key:
             raise ValueError("CEREBRAS_API_KEY environment variable not set")
         self.client = OpenAI(api_key=api_key, base_url="https://api.cerebras.ai/v1")
-        self.model = "llama3.1-70b"
+        self.model = "llama-3.3-70b"
 
     def send(self, system: str, user: str) -> str:  # pragma: no cover
         """Sendet Prompts an Cerebras-API und erhält Antwort.
