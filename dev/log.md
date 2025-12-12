@@ -339,3 +339,17 @@
 - Kommentar: "Silently skip directories that cannot be read"
 - `test_generate_skips_unreadable_directory` NEU: Verifiziert graceful degradation
 - 43/43 Tests bestanden, 100% Coverage
+
+## Phase 4: LLM Provider Interface - Test-Verbesserungen
+
+### #039 - 2025-12-12 14:30
+**Aktion:** Code-Review-Feedback für LLM Provider Tests implementiert
+**Warum:** Code-Review identifizierte 6 Issues: mypy-Fehler, irreführende Tests, zu strikte Assertions, fehlende Protocol-Konformitätstests, inkonsistente Parameternamen
+**Ergebnis:**
+- `test_llm_provider_is_protocol`: Fix für mypy type error (`issubclass(X, Protocol)` → `getattr(X, "_is_protocol")`)
+- `test_cerebras_provider_init_has_docstring`: Entfernt (irreführend, nutzte Python's Default-Docstring)
+- `test_get_provider_unknown_raises_value_error`, `test_get_provider_invalid_provider_raises_value_error`: Weniger strikte Assertions (Substring-Check statt exakter String-Vergleich)
+- `test_llm_provider_has_docstring`, `test_send_method_has_docstring`: Flexiblere Assertions (generische Keywords statt exakte Formulierungen)
+- `test_factory_returns_protocol_conformant_provider` NEU: Demonstriert Protocol-Konformität mit Hilfsfunktion `use_provider(provider: LLMProvider)`
+- `MockProvider.send`: Parameternamen von `_system`/`_user` zu `system`/`user` geändert (konsistent mit Protocol)
+- 49 Tests bestanden, 100% Coverage für codemap.core, mypy clean

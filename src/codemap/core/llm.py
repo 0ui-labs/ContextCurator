@@ -46,7 +46,7 @@ class MockProvider:
         Immer derselbe vordefinierte String mit typischen gitignore-Mustern.
     """
 
-    def send(self, _system: str, _user: str) -> str:
+    def send(self, system: str, user: str) -> str:  # noqa: ARG002
         """Gibt einen deterministischen String im gitignore-Format zurück.
 
         Ignoriert die übergebenen Prompts und gibt immer denselben
@@ -54,8 +54,8 @@ class MockProvider:
         gitignore-Patterns für spätere StructureAdvisor-Tests.
 
         Args:
-            _system: System-Prompt (wird ignoriert).
-            _user: User-Prompt (wird ignoriert).
+            system: System-Prompt (wird ignoriert).
+            user: User-Prompt (wird ignoriert).
 
         Returns:
             Fest vordefinierter String mit gitignore-Patterns:
