@@ -66,7 +66,21 @@ class TestParserEngine:
         assert nodes[0].end_line == 1
 
     def test_extracts_import_from_statement(self):
-        """Test parser extracts from-import statement with correct metadata."""
+        """Test parser extracts from-import statement with correct metadata.
+
+        Implementation Note:
+            For `from X import Y` statements, the CodeNode represents the module
+            being imported FROM, not the imported symbol:
+            - type: "import"
+            - name: module part (X), e.g., "pathlib" for `from pathlib import Path`
+
+            This design decision means:
+            - The module dependency is captured (useful for dependency analysis)
+            - Imported symbols (Y) are not stored in this CodeNode
+
+            Future extensions may add imported symbols via additional attributes
+            or separate CodeNode instances without breaking this API contract.
+        """
         code = "from pathlib import Path\n"
         engine = ParserEngine()
 
@@ -74,7 +88,7 @@ class TestParserEngine:
 
         assert len(nodes) == 1
         assert nodes[0].type == "import"
-        assert nodes[0].name == "pathlib"
+        assert nodes[0].name == "pathlib"  # Module part, not imported symbol
         assert nodes[0].start_line == 1
         assert nodes[0].end_line == 1
 
