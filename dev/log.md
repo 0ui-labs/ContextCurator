@@ -537,3 +537,105 @@
 - `token_est` Attribut: "calculated as size / 4 rounded to int." ergänzt
 - Konsistenz mit TreeReport.estimated_tokens Dokumentationsformat
 - Beispiel-Werte konsistent: size=1024, token_est=256 (1024/4=256)
+
+## Phase 6: FileWalker - TDD RED Phase
+
+### #051 - 2025-12-13 14:30
+**Aktion:** FileWalker Test-Suite erstellt (TDD RED Phase)
+**Warum:** Plan 02 erfordert umfassende Tests für FileWalker vor Implementation
+**Ergebnis:**
+- `tests/unit/scout/test_walker.py` NEU: 26 Tests in 6 Klassen
+  - TestFileWalkerBasic (4 Tests): Rückgabetyp, leere Verzeichnisse, einzelne Datei, verschachtelte Strukturen
+  - TestFileWalkerPatterns (4 Tests): Einzelne/multiple Patterns, Directory-Patterns, Wildcard-Patterns
+  - TestFileWalkerDefaultIgnores (4 Tests): .git, .venv, __pycache__ automatisch ignoriert
+  - TestFileWalkerMetadata (5 Tests): Size-Berechnung, Token-Formel (size // 4), relative Pfade, leere Dateien
+  - TestFileWalkerSorting (3 Tests): Alphabetisch, verschachtelt, deterministisch
+  - TestFileWalkerEdgeCases (6 Tests): Permission-Errors, tiefe Verschachtelung, Sonderzeichen, ValueError für ungültige Pfade
+- RED Phase verifiziert: `ImportError: cannot import name 'FileEntry'` (strikt TDD)
+
+### #052 - 2025-12-13 14:45
+**Aktion:** Strikt TDD RED Phase - FileEntry temporär entfernt
+**Warum:** Verifikationskommentar: FileEntry existierte bereits, aber RED Phase soll beide Imports fehlschlagen lassen
+**Ergebnis:**
+- `src/codemap/scout/models.py`: FileEntry Klasse entfernt (wird in GREEN Phase re-implementiert)
+- `src/codemap/scout/__init__.py`: FileEntry aus Import und `__all__` entfernt
+- `tests/unit/scout/test_models.py`: TestFileEntry Tests schlagen nun ebenfalls fehl (konsistente RED Phase)
+- `tests/unit/scout/test_tree.py`: 24 Tests bestanden (keine FileEntry-Abhängigkeit)
+- RED Phase verifiziert: Beide Imports `FileEntry` und `FileWalker` erzeugen Fehler
+
+### #053 - 2025-12-13 15:00
+**Aktion:** ValueError-Test präzisiert und fehlende Tests ergänzt (Review-Feedback)
+**Warum:** Verifikationskommentar: try/except im Test war mehrdeutig; Plan forderte weitere Tests für 100% Coverage
+**Ergebnis:**
+- `test_walker_nonexistent_path`: `pytest.raises(ValueError, match="Path does not exist")` analog zu test_tree.py
+- `test_walker_nested_structure` NEU: src/main.py und tests/test_main.py mit relativen Pfaden
+- `test_walker_respects_wildcard_patterns` NEU: test_*.py Pattern-Matching
+- `test_walker_calculates_size_correctly` NEU: Mehrere Dateigrößen (50, 200, 1000 Bytes)
+- `test_walker_handles_empty_files` NEU: 0 Bytes → size=0, token_est=0
+- `test_walker_sorting_is_deterministic` NEU: Identische Reihenfolge bei wiederholten Aufrufen
+- `test_walker_file_as_root_raises_error` NEU: ValueError wenn Root ein File ist
+- `test_walker_ignores_directories_only_files` NEU: Nur Dateien, keine Verzeichnisse in Ergebnissen
+- 26 Tests total, alle AAA-Pattern mit Docstrings, RED Phase weiterhin aktiv
+
+## Phase 6: FileWalker - TDD GREEN Phase
+
+### #054 - 2025-12-13 16:30
+**Aktion:** FileWalker implementiert (TDD GREEN Phase)
+**Warum:** Plan 03 erfordert vollständige Implementation basierend auf existierenden Tests
+**Ergebnis:**
+- `src/codemap/scout/walker.py` NEU:
+  - `DEFAULT_IGNORES: set[str] = {".git", ".venv", "__pycache__"}` Konstante
+  - `FileWalker` Klasse mit Docstring (Zweck, Pattern-Matching, Rückgabetyp)
+  - `walk(root, ignore_patterns=None) -> list[FileEntry]`:
+    - Input-Validierung: ValueError für nicht-existente/nicht-Directory Pfade
+    - Pattern-Kompilierung mit `pathspec.PathSpec.from_lines("gitwildmatch", ...)`
+    - Directory-Traversal mit `root.rglob("*")`
+    - Metadata-Collection: `size = path.stat().st_size`, `token_est = size // 4`
+    - OSError-Handling für Permission-Errors (graceful skip)
+    - Case-insensitive String-Sortierung: `str(e.path).lower()`
+- `src/codemap/scout/__init__.py`: `FileWalker` zu Import und `__all__` hinzugefügt
+- `tests/unit/scout/test_init.py`: FileWalker in expected exports aufgenommen
+- `tests/unit/scout/test_walker.py`:
+  - `test_walker_without_ignore_patterns` NEU: Testet optionales `ignore_patterns`
+  - Permission-Error-Test-Mock korrigiert (`**kwargs` für `follow_symlinks`)
+- 27/27 Walker-Tests bestanden, 100% Coverage für walker.py
+
+### #055 - 2025-12-13 16:45
+**Aktion:** Sortierung auf case-insensitive String-Vergleich geändert (Review-Feedback)
+**Warum:** Verifikationskommentar: Path-Objekt-Sortierung kann von expliziter String-Sortierung abweichen
+**Ergebnis:**
+- `walker.py`: `entries.sort(key=lambda e: str(e.path).lower())` statt `e.path`
+- Konsistente, case-insensitive alphabetische Sortierung auf allen Plattformen
+
+## Phase 6: FileWalker - TDD REFACTOR Phase
+
+### #057 - 2025-12-13 18:30
+**Aktion:** FileWalker Refactoring nach Verifikationskommentaren
+**Warum:** Code-Review identifizierte 3 Verbesserungsmöglichkeiten für Konsistenz, Effizienz und Explizitheit
+**Ergebnis:**
+1. **Case-sensitive Sortierung** (Kommentar 1):
+   - `entries.sort(key=lambda e: str(e.path))` statt `.lower()`
+   - Konsistent mit TreeGenerator und Dateisystem-Semantik
+2. **Early Pruning für DEFAULT_IGNORES** (Kommentar 2):
+   - `if any(part in DEFAULT_IGNORES for part in relative_path.parts): continue`
+   - Short-circuit vor pathspec-Matching (Set-Lookup O(1) effizienter)
+3. **Explizite OSError-Behandlung** (Kommentar 3):
+   - Separater try/except für `is_dir()` (kann auch stat aufrufen)
+   - Separater try/except für `stat()` Metadata-Collection
+   - Relative-Path-Berechnung und pathspec-Matching außerhalb try-Blöcke
+- `tests/unit/scout/test_walker.py` ERWEITERT:
+  - `test_walker_handles_permission_error` → `test_walker_handles_permission_error_on_is_dir`
+  - `test_walker_handles_permission_error_on_stat` NEU (mit Call-Tracking für Metadata-stat)
+  - mypy-Fehler behoben: `mock_stat` Signatur korrigiert für `follow_symlinks: bool`
+  - `import os` hinzugefügt für `os.stat_result` Type-Annotation
+- 28/28 Tests bestanden, 100% Coverage für walker.py, alle Quality-Checks bestanden
+
+### #056 - 2025-12-13 16:50
+**Aktion:** ignore_patterns Parameter optional gemacht (Review-Feedback)
+**Warum:** Verifikationskommentar: Einfache Nutzung ohne Patterns sollte möglich sein
+**Ergebnis:**
+- `walk(root, ignore_patterns=None)`: Parameter mit Default `None`
+- Interne Normalisierung: `if ignore_patterns is None: ignore_patterns = []`
+- Docstring: "Optional list of gitignore-style patterns" mit Default-Hinweis
+- `test_walker_without_ignore_patterns` NEU: Verifiziert Aufruf ohne zweiten Parameter
+- 27/27 Tests bestanden, 100% Coverage für walker.py

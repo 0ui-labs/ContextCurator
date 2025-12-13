@@ -8,5 +8,6 @@ and LLM-powered analysis for identifying non-source files/folders.
 from codemap.scout.advisor import StructureAdvisor
 from codemap.scout.models import FileEntry, TreeReport
 from codemap.scout.tree import TreeGenerator
+from codemap.scout.walker import FileWalker
 
-__all__ = ["FileEntry", "StructureAdvisor", "TreeGenerator", "TreeReport"]
+__all__ = ["FileEntry", "FileWalker", "StructureAdvisor", "TreeGenerator", "TreeReport"]

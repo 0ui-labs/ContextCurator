@@ -21,5 +21,5 @@ def test_all_list_alphabetical_order():
 
 def test_all_expected_exports():
     """Test that all expected exports are present in __all__."""
-    expected = ["FileEntry", "StructureAdvisor", "TreeGenerator", "TreeReport"]
+    expected = ["FileEntry", "FileWalker", "StructureAdvisor", "TreeGenerator", "TreeReport"]
     assert set(codemap.scout.__all__) == set(expected)
