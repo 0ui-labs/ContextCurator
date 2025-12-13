@@ -798,3 +798,40 @@
 - `engine.py`: Extrahiert Extension intern via `path.suffix.lower()`
 - `test_engine.py`: Tests aktualisiert: `Path("example.py")` statt `".py"`
 - 20/20 Tests bestanden, 100% Coverage
+
+## Phase 8: Mapper Module - TDD REFACTOR Phase
+
+### #072 - 2025-12-13 16:00
+**Aktion:** REFACTOR Phase - Quality Gates verifiziert
+**Warum:** Plan 03 erforderte 100% Coverage, mypy strict, Docstrings, ruff clean
+**Ergebnis:**
+- **Coverage:** 100% für alle 5 Mapper-Module (models, reader, queries, engine, __init__)
+- **mypy strict:** Success: no issues found in 5 source files
+- **Docstrings:** Alle Public APIs mit Google-Style Docstrings dokumentiert
+- **ruff:** 1 Formatting-Fix in engine.py (ruff format angewendet)
+- **Integration:** 207/207 Gesamtprojekt-Tests bestanden, 100% Coverage
+- Alle Quality Gates erfüllt
+
+### #073 - 2025-12-13 16:15
+**Aktion:** Cerebras Model-Name Bug in test_llm.py gefixt
+**Warum:** Pre-existierender Bug: Implementation nutzte `llama-3.3-70b`, Tests erwarteten `llama3.1-70b`
+**Ergebnis:**
+- `tests/unit/core/test_llm.py`: 3 Stellen aktualisiert
+  - Zeile 306-307: Kommentar und Assert korrigiert
+  - Zeile 380: Mock-Call Erwartung korrigiert
+- Ursache: Commit `17be611` hatte Model-Update ohne Test-Update
+- 207/207 Tests bestanden nach Fix
+
+### #074 - 2025-12-13 16:30
+**Aktion:** Feature-Branch zu main gemerged
+**Warum:** Phase 8 Mapper TDD-Zyklus (RED-GREEN-REFACTOR) abgeschlossen
+**Ergebnis:**
+- Commit: `feat(mapper): implement GREEN phase with 100% coverage` (20c57fd)
+- Push: `feature/mapper-tdd-red-phase` zu origin
+- Merge: Fast-forward zu main
+- Cleanup: Feature-Branch lokal und remote gelöscht
+- **Deliverables:**
+  - 5 neue Module in `src/codemap/mapper/`
+  - 3 Test-Dateien in `tests/unit/mapper/`
+  - 3 Planungsdokumente in `dev/phase-08/`
+  - 207/207 Tests, 100% Coverage, alle Quality Gates bestanden
