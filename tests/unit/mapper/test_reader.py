@@ -16,7 +16,7 @@ class TestContentReader:
         test_file.write_text(content, encoding="utf-8")
 
         reader = ContentReader()
-        result = reader.read(test_file)
+        result = reader.read_file(test_file)
         assert result == content
         assert "🚀" in result
 
@@ -27,7 +27,7 @@ class TestContentReader:
         test_file.write_bytes(content.encode("latin-1"))
 
         reader = ContentReader()
-        result = reader.read(test_file)
+        result = reader.read_file(test_file)
         assert "ä" in result
         assert "ö" in result
         assert "ü" in result
@@ -39,7 +39,7 @@ class TestContentReader:
         nonexistent_path = Path("/nonexistent/file/path.py")
 
         with pytest.raises(ContentReadError):
-            reader.read(nonexistent_path)
+            reader.read_file(nonexistent_path)
 
     def test_read_binary_file_raises_error(self, tmp_path):
         """Test reading binary file raises ContentReadError."""
@@ -48,7 +48,7 @@ class TestContentReader:
 
         reader = ContentReader()
         with pytest.raises(ContentReadError):
-            reader.read(test_file)
+            reader.read_file(test_file)
 
     def test_read_empty_file(self, tmp_path):
         """Test reading empty file returns empty string."""
@@ -56,5 +56,5 @@ class TestContentReader:
         test_file.write_text("", encoding="utf-8")
 
         reader = ContentReader()
-        result = reader.read(test_file)
+        result = reader.read_file(test_file)
         assert result == ""
