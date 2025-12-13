@@ -63,11 +63,29 @@ class ParserEngine:
 
         # Or use parse_file for automatic language detection:
         >>> nodes = engine.parse_file(Path("example.py"), code)
+
+    Thread Safety:
+        ParserEngine instances are NOT thread-safe. The internal query cache
+        may exhibit race conditions when accessed concurrently from multiple
+        threads. For parallel processing, create a separate ParserEngine
+        instance per thread or worker.
     """
 
     def __init__(self) -> None:
         """Initialize ParserEngine."""
-        pass
+        self._query_cache: dict[str, Query] = {}
+
+    @property
+    def cached_languages(self) -> frozenset[str]:
+        """Return the set of language IDs with cached queries.
+
+        This property provides read-only access to which languages have
+        compiled queries in the cache. Useful for testing and diagnostics.
+
+        Returns:
+            Immutable set of cached language identifier strings.
+        """
+        return frozenset(self._query_cache.keys())
 
     def get_language_id(self, path: Path) -> str:
         """Map file path to tree-sitter language identifier.
@@ -154,11 +172,18 @@ class ParserEngine:
         parser = get_parser(language_id)  # type: ignore[arg-type]
         lang = get_language(language_id)  # type: ignore[arg-type]
 
+        # Check cache for compiled query to avoid recompilation
+        if language_id in self._query_cache:
+            query = self._query_cache[language_id]
+        else:
+            # Create new query and cache it for future use
+            query = Query(lang, query_string)
+            self._query_cache[language_id] = query
+
         # Parse code (tree-sitter requires bytes)
         tree = parser.parse(bytes(code, "utf-8"))
 
-        # Create query and cursor using tree-sitter API
-        query = Query(lang, query_string)
+        # Create query cursor using tree-sitter API
         cursor = QueryCursor(query)
 
         # Execute query and collect captures as (node, capture_name) sequence

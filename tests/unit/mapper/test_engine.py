@@ -1,6 +1,7 @@
 """Unit tests for mapper.engine module."""
 
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -168,6 +169,36 @@ def second_function():
 
         with pytest.raises(ValueError):
             engine.parse(code, language_id="javascript")
+
+    def test_query_cache_reuses_compiled_query(self) -> None:
+        """Test that ParserEngine reuses cached Query objects for same language.
+
+        Verifies caching via:
+        1. Public cached_languages property (stable interface)
+        2. Mocking Query constructor to count instantiations
+        """
+        from tree_sitter import Query
+
+        engine = ParserEngine()
+        code = "def foo():\n    pass\n"
+
+        # Wrap Query to count instantiations
+        with patch("codemap.mapper.engine.Query", wraps=Query) as mock_query:
+            # First parse - populates cache (Query constructor called)
+            nodes1 = engine.parse(code, language_id="python")
+
+            # Verify cache was populated via public property
+            assert "python" in engine.cached_languages
+            assert mock_query.call_count == 1
+
+            # Second parse - should hit cache (Query constructor NOT called again)
+            nodes2 = engine.parse(code, language_id="python")
+
+            # Verify Query was only instantiated once (cache hit)
+            assert mock_query.call_count == 1
+
+            # Verify results are identical
+            assert nodes1 == nodes2
 
 
 class TestParseFile:
