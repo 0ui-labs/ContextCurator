@@ -1,5 +1,7 @@
 """Unit tests for mapper.reader module."""
 
+from unittest.mock import patch
+
 import pytest
 from pathlib import Path
 
@@ -58,3 +60,17 @@ class TestContentReader:
         reader = ContentReader()
         result = reader.read_file(test_file)
         assert result == ""
+
+    def test_read_permission_error_raises_content_read_error(self, tmp_path):
+        """Test reading file with permission error raises ContentReadError."""
+        test_file = tmp_path / "test_permission.py"
+        test_file.write_text("content", encoding="utf-8")
+
+        reader = ContentReader()
+
+        # Mock read_bytes to raise PermissionError (subclass of OSError)
+        with patch.object(Path, "read_bytes", side_effect=PermissionError("Permission denied")):
+            with pytest.raises(ContentReadError) as exc_info:
+                reader.read_file(test_file)
+            assert "Cannot read file" in str(exc_info.value)
+            assert "Permission denied" in str(exc_info.value)

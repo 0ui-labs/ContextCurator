@@ -738,3 +738,63 @@
 - `test_walker.py`: `test_walker_excludes_gitignore_file` NEU: Verifiziert .gitignore-Ausschluss
 - Konsistenz erreicht: Beide Module (tree.py, walker.py) behandeln .gitignore identisch
 - 118/118 Scout-Tests bestanden, 100% Coverage für walker.py
+
+## Phase 8: Mapper Module - TDD RED Phase
+
+### #067 - 2025-12-13 23:30
+**Aktion:** TDD RED Phase Tests für Mapper Module erstellt
+**Warum:** Plan erfordert tree-sitter-basierte Code-Analyse; strikte TDD mit Tests vor Implementation
+**Ergebnis:**
+- `tests/unit/mapper/__init__.py` NEU: Package-Marker
+- `tests/unit/mapper/test_models.py` NEU: 5 Tests für CodeNode Dataclass
+  - Creation, Immutability (frozen), Equality, Attributes, Different Types
+- `tests/unit/mapper/test_reader.py` NEU: 5 Tests für ContentReader
+  - UTF-8, Latin-1 Fallback, Nonexistent File, Binary File, Empty File
+  - API: `read_file()` (nicht `read()`) per Plan-Spezifikation
+- `tests/unit/mapper/test_engine.py` NEU: 8 Tests für ParserEngine
+  - TestLanguageMapping (2): .py → "python", unknown → ValueError
+  - TestParserEngine (6): Function, Class, Import, From-Import, Multiple, Empty
+  - From-Import-Verhalten dokumentiert: `name` = Modul-Teil (X bei `from X import Y`)
+- RED Phase verifiziert: Alle 18 Tests schlagen mit `ModuleNotFoundError: No module named 'codemap.mapper'` fehl
+- Branch: `feature/mapper-tdd-red-phase`
+
+## Phase 8: Mapper Module - TDD GREEN Phase
+
+### #068 - 2025-12-13 14:00
+**Aktion:** TDD GREEN Phase - Mapper Module vollständig implementiert
+**Warum:** Plan 02 erfordert Implementation aller vier Module (models, reader, queries, engine)
+**Ergebnis:**
+- `src/codemap/mapper/__init__.py` NEU: Package mit Public API Exports
+- `src/codemap/mapper/models.py` NEU: `CodeNode` frozen Dataclass (type, name, start_line, end_line)
+- `src/codemap/mapper/reader.py` NEU: `ContentReader` mit UTF-8/Latin-1 Fallback, Binary-Detection
+- `src/codemap/mapper/queries.py` NEU: Tree-sitter S-Expression Queries für Python
+- `src/codemap/mapper/engine.py` NEU: `ParserEngine` mit tree-sitter-language-pack Integration
+- Test hinzugefügt: `test_unsupported_language_raises_error` für 100% Coverage
+- 19/19 Tests bestanden, 100% Coverage für alle Mapper-Module, mypy clean
+
+### #069 - 2025-12-13 14:30
+**Aktion:** tree-sitter API-Nutzung refactored (Verifikationskommentar 1)
+**Warum:** QueryCursor API war inkorrekt, sollte `(node, capture_name)` Tupel-Iteration nutzen
+**Ergebnis:**
+- `engine.py`: `_flatten_captures()` Hilfsmethode hinzugefügt
+- `engine.py`: `Query(lang, ...)` + `QueryCursor(query)` + `cursor.captures(root_node)`
+- `engine.py`: Iteration über `(ts_node, capture_name)` Tupel mit `capture_to_type` Mapping
+- 19/19 Tests bestanden, 100% Coverage
+
+### #070 - 2025-12-13 15:00
+**Aktion:** OSError-Handling in ContentReader hinzugefügt (Verifikationskommentar 2)
+**Warum:** `path.read_bytes()` konnte bei Permission-Fehlern unerwartete Exceptions werfen
+**Ergebnis:**
+- `reader.py`: try/except um `path.read_bytes()`, wrapped `OSError` in `ContentReadError`
+- `reader.py`: Docstring aktualisiert um Permission-Denied-Fälle
+- `test_reader.py`: `test_read_permission_error_raises_content_read_error` NEU (mit Mock)
+- 20/20 Tests bestanden, 100% Coverage für reader.py
+
+### #071 - 2025-12-13 15:15
+**Aktion:** get_language_id API von String auf Path umgestellt (Verifikationskommentar 3)
+**Warum:** Produktionscode hat typischerweise Path-Objekte, nicht Extensions-Strings
+**Ergebnis:**
+- `engine.py`: `get_language_id(extension: str)` → `get_language_id(path: Path)`
+- `engine.py`: Extrahiert Extension intern via `path.suffix.lower()`
+- `test_engine.py`: Tests aktualisiert: `Path("example.py")` statt `".py"`
+- 20/20 Tests bestanden, 100% Coverage

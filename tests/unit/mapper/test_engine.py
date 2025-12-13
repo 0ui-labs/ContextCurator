@@ -13,14 +13,14 @@ class TestLanguageMapping:
     def test_get_language_id_python(self):
         """Test .py extension maps to 'python' language ID."""
         engine = ParserEngine()
-        language = engine.get_language_id(".py")
+        language = engine.get_language_id(Path("example.py"))
         assert language == "python"
 
     def test_get_language_id_unknown_extension(self):
         """Test unknown extension raises ValueError."""
         engine = ParserEngine()
         with pytest.raises(ValueError):
-            engine.get_language_id(".xyz")
+            engine.get_language_id(Path("example.xyz"))
 
 
 class TestParserEngine:
@@ -127,3 +127,11 @@ def second_function():
 
         assert nodes == []
         assert isinstance(nodes, list)
+
+    def test_unsupported_language_raises_error(self):
+        """Test parser raises ValueError for unsupported language."""
+        code = "def foo(): pass"
+        engine = ParserEngine()
+
+        with pytest.raises(ValueError):
+            engine.parse(code, language="javascript")

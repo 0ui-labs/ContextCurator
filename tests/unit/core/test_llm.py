@@ -303,8 +303,8 @@ class TestCerebrasProvider:
             base_url="https://api.cerebras.ai/v1"
         )
 
-        # Verify model is set to "llama3.1-70b"
-        assert provider.model == "llama3.1-70b"
+        # Verify model is set to "llama-3.3-70b"
+        assert provider.model == "llama-3.3-70b"
 
     @patch.dict(os.environ, {}, clear=True)
     def test_cerebras_provider_init_missing_api_key(self) -> None:
@@ -377,7 +377,7 @@ class TestCerebrasProvider:
         # Assert
         # Verify chat.completions.create was called with correct parameters
         mock_client.chat.completions.create.assert_called_once_with(
-            model="llama3.1-70b",
+            model="llama-3.3-70b",
             messages=[
                 {"role": "system", "content": "system prompt"},
                 {"role": "user", "content": "user prompt"}
