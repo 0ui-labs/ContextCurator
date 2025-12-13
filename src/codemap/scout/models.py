@@ -4,8 +4,8 @@ This module contains dataclasses used for structured data representation
 in the scout module, particularly for tree generation reports.
 """
 
-from pathlib import Path
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -71,5 +71,3 @@ class FileEntry:
     path: Path
     size: int
     token_est: int
-
-

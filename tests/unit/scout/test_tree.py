@@ -288,6 +288,154 @@ class TestTreeGeneratorIgnoreHidden:
         assert "src/" in result.tree_string
         assert "main.py" in result.tree_string
 
+    def test_generate_ignores_system_scm_directories(self, tmp_path: Path) -> None:
+        """Test that system/SCM directories (.svn, .hg, .DS_Store) are ignored."""
+        # Arrange
+        (tmp_path / ".svn").mkdir()
+        (tmp_path / ".svn" / "entries").write_text("content")
+        (tmp_path / ".hg").mkdir()
+        (tmp_path / ".hg" / "dirstate").write_text("content")
+        (tmp_path / ".DS_Store").mkdir()
+        (tmp_path / "Thumbs.db").mkdir()
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "main.py").write_text("content")
+
+        generator = TreeGenerator()
+
+        # Act
+        result = generator.generate(tmp_path)
+
+        # Assert - System/SCM directories are hidden
+        assert ".svn" not in result.tree_string
+        assert "entries" not in result.tree_string
+        assert ".hg" not in result.tree_string
+        assert "dirstate" not in result.tree_string
+        assert ".DS_Store" not in result.tree_string
+        assert "Thumbs.db" not in result.tree_string
+        # Real source code should be visible
+        assert "src/" in result.tree_string
+        assert "main.py" in result.tree_string
+
+    def test_generate_ignores_build_directories(self, tmp_path: Path) -> None:
+        """Test that build directories (dist, build, out, target) are ignored."""
+        # Arrange
+        (tmp_path / "dist").mkdir()
+        (tmp_path / "dist" / "bundle.js").write_text("content")
+        (tmp_path / "build").mkdir()
+        (tmp_path / "build" / "output.jar").write_text("content")
+        (tmp_path / "out").mkdir()
+        (tmp_path / "out" / "compiled.exe").write_text("content")
+        (tmp_path / "target").mkdir()
+        (tmp_path / "target" / "release").mkdir()
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "main.py").write_text("content")
+
+        generator = TreeGenerator()
+
+        # Act
+        result = generator.generate(tmp_path)
+
+        # Assert - Build directories are hidden (check for directory markers to avoid false positives)
+        assert "dist/" not in result.tree_string
+        assert "bundle.js" not in result.tree_string
+        assert "build/" not in result.tree_string
+        assert "output.jar" not in result.tree_string
+        assert "out/" not in result.tree_string
+        assert "compiled.exe" not in result.tree_string
+        assert "target/" not in result.tree_string
+        assert "release" not in result.tree_string
+        # Real source code should be visible
+        assert "src/" in result.tree_string
+        assert "main.py" in result.tree_string
+
+    def test_generate_ignores_node_web_directories(self, tmp_path: Path) -> None:
+        """Test that Node/Web directories (bower_components, .next, .cache) are ignored."""
+        # Arrange
+        (tmp_path / "bower_components").mkdir()
+        (tmp_path / "bower_components" / "jquery").mkdir()
+        (tmp_path / ".next").mkdir()
+        (tmp_path / ".next" / "static").mkdir()
+        (tmp_path / ".cache").mkdir()
+        (tmp_path / ".cache" / "webpack").mkdir()
+        (tmp_path / ".nuxt").mkdir()
+        (tmp_path / "coverage").mkdir()
+        (tmp_path / "coverage" / "lcov.info").write_text("content")
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "app.js").write_text("content")
+
+        generator = TreeGenerator()
+
+        # Act
+        result = generator.generate(tmp_path)
+
+        # Assert - Node/Web directories are hidden
+        assert "bower_components" not in result.tree_string
+        assert "jquery" not in result.tree_string
+        assert ".next" not in result.tree_string
+        assert "static" not in result.tree_string
+        assert ".cache" not in result.tree_string
+        assert "webpack" not in result.tree_string
+        assert ".nuxt" not in result.tree_string
+        assert "coverage" not in result.tree_string
+        assert "lcov.info" not in result.tree_string
+        # Real source code should be visible
+        assert "src/" in result.tree_string
+        assert "app.js" in result.tree_string
+
+    def test_generate_ignores_python_directories(self, tmp_path: Path) -> None:
+        """Test that Python directories (venv, .pytest_cache, htmlcov) are ignored."""
+        # Arrange
+        (tmp_path / "venv").mkdir()
+        (tmp_path / "venv" / "lib").mkdir()
+        (tmp_path / ".pytest_cache").mkdir()
+        (tmp_path / ".pytest_cache" / "v").mkdir()
+        (tmp_path / "htmlcov").mkdir()
+        (tmp_path / "htmlcov" / "index.html").write_text("content")
+        (tmp_path / ".mypy_cache").mkdir()
+        (tmp_path / ".ruff_cache").mkdir()
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "main.py").write_text("content")
+
+        generator = TreeGenerator()
+
+        # Act
+        result = generator.generate(tmp_path)
+
+        # Assert - Python directories are hidden
+        assert "venv" not in result.tree_string or "venv/" not in result.tree_string
+        assert ".pytest_cache" not in result.tree_string
+        assert "htmlcov" not in result.tree_string
+        assert "index.html" not in result.tree_string
+        assert ".mypy_cache" not in result.tree_string
+        assert ".ruff_cache" not in result.tree_string
+        # Real source code should be visible
+        assert "src/" in result.tree_string
+        assert "main.py" in result.tree_string
+
+    def test_generate_ignores_ide_directories(self, tmp_path: Path) -> None:
+        """Test that IDE directories (.idea, .vscode) are ignored."""
+        # Arrange
+        (tmp_path / ".idea").mkdir()
+        (tmp_path / ".idea" / "workspace.xml").write_text("content")
+        (tmp_path / ".vscode").mkdir()
+        (tmp_path / ".vscode" / "settings.json").write_text("content")
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "main.py").write_text("content")
+
+        generator = TreeGenerator()
+
+        # Act
+        result = generator.generate(tmp_path)
+
+        # Assert - IDE directories are hidden
+        assert ".idea" not in result.tree_string
+        assert "workspace.xml" not in result.tree_string
+        assert ".vscode" not in result.tree_string
+        assert "settings.json" not in result.tree_string
+        # Real source code should be visible
+        assert "src/" in result.tree_string
+        assert "main.py" in result.tree_string
+
 
 class TestTreeGeneratorSorting:
     """Test suite for alphabetical sorting of files and directories."""

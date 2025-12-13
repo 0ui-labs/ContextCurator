@@ -639,3 +639,102 @@
 - Docstring: "Optional list of gitignore-style patterns" mit Default-Hinweis
 - `test_walker_without_ignore_patterns` NEU: Verifiziert Aufruf ohne zweiten Parameter
 - 27/27 Tests bestanden, 100% Coverage für walker.py
+
+## Phase 7: .gitignore-Unterstützung und erweiterte Default-Ignores
+
+### #058 - 2025-12-13 19:30
+**Aktion:** Tests für .gitignore-Unterstützung und polyglot Default-Ignores erstellt (TDD RED Phase)
+**Warum:** Plan 01 Phase 7 erfordert Tests vor Implementation für .gitignore-Parsing und erweiterte Ignores
+**Ergebnis:**
+- `tests/unit/scout/test_walker.py` ERWEITERT (TestFileWalkerDefaultIgnores):
+  - `test_walker_reads_local_gitignore` NEU: Testet .gitignore-Datei-Parsing
+  - `test_walker_ignores_common_junk_polyglot` NEU: Testet node_modules, wp-admin, .dart_tool, target
+- RED Phase verifiziert: Beide Tests fehlgeschlagen wie erwartet
+  - gitignore-Test: `local_ignore.txt` erschien in Ergebnissen
+  - polyglot-Test: `.dart_tool` erschien in Ergebnissen
+
+### #059 - 2025-12-13 19:45
+**Aktion:** .gitignore-Unterstützung in FileWalker implementiert (TDD GREEN Phase - Comment 1)
+**Warum:** Test `test_walker_reads_local_gitignore` erforderte .gitignore-Parsing
+**Ergebnis:**
+- `src/codemap/scout/walker.py` ERWEITERT:
+  - `_load_gitignore(root: Path) -> list[str]` NEU: Liest .gitignore aus Root
+    - Parst jede Zeile als Pattern (ignoriert # Kommentare und leere Zeilen)
+    - OSError-Handling für unlesbare Dateien
+  - `walk()` aktualisiert: Lädt und kombiniert .gitignore-Patterns mit DEFAULT_IGNORES
+  - Docstring aktualisiert: Beschreibt additive Pattern-Kombination
+- 30/30 Tests bestanden, test_walker_reads_local_gitignore GRÜN
+
+### #060 - 2025-12-13 19:50
+**Aktion:** DEFAULT_IGNORES um polyglot Verzeichnisse erweitert (TDD GREEN Phase - Comment 2)
+**Warum:** Test `test_walker_ignores_common_junk_polyglot` erforderte erweiterte Ignores
+**Ergebnis:**
+- `src/codemap/scout/walker.py`:
+  - `DEFAULT_IGNORES` erweitert: `node_modules`, `wp-admin`, `.dart_tool`, `target`
+  - Kommentar: "polyglot defaults for common ecosystems"
+- 30/30 Tests bestanden, test_walker_ignores_common_junk_polyglot GRÜN
+
+### #061 - 2025-12-13 20:00
+**Aktion:** .gitignore-Semantik dokumentiert (Review-Feedback - Comment 3)
+**Warum:** Verifikationskommentar forderte klare Dokumentation der additiven Semantik
+**Ergebnis:**
+- `src/codemap/scout/walker.py` Docstrings präzisiert:
+  - Klassen-Docstring: "Ignore sources (all applied together)" mit 3 nummerierten Punkten
+  - Methoden-Docstring: "Exclusion behavior" Abschnitt mit Erklärung
+  - Explizit: ".gitignore file is always read from root directory if present, regardless of whether ignore_patterns is provided"
+- Entscheidung: Variante 1 gewählt (.gitignore immer additiv angewendet)
+- 30/30 Tests bestanden, keine Regressionen
+
+### #062 - 2025-12-13 21:00
+**Aktion:** DEFAULT_IGNORES/IGNORED_DIRS auf umfassende polyglot Master-Liste erweitert (Plan Phase 7 Step 1-2)
+**Warum:** Plan erforderte konsistente, umfassende Ignore-Liste für beide Module (walker.py, tree.py)
+**Ergebnis:**
+- `src/codemap/scout/walker.py`: DEFAULT_IGNORES von 7 auf 82 Patterns erweitert
+  - 11 Kategorien: System/SCM, Build, Node/Web, Python, PHP/WordPress, Dart/Flutter, Java/JVM, .NET, C/C++, Go, IDEs
+  - Kommentierte Gruppierung für Wartbarkeit
+- `src/codemap/scout/tree.py`: IGNORED_DIRS identisch aktualisiert (Plan-Anforderung: "identical master lists")
+- `tests/unit/scout/test_walker.py`: 7 neue Tests für alle Ecosystem-Kategorien
+- `tests/unit/scout/test_tree.py`: 5 neue Tests für Ecosystem-Kategorien
+- 116/116 Tests bestanden, 100% Coverage für scout Module
+
+### #063 - 2025-12-13 21:15
+**Aktion:** Exception-Handling für .gitignore-Lesen konsistent gemacht (Verifikationskommentar 1)
+**Warum:** tree.py fing `(OSError, UnicodeError)`, walker.py nur `OSError`
+**Ergebnis:**
+- `walker.py` `_load_gitignore()`: `except OSError` → `except (OSError, UnicodeError)`
+- Konsistente Fehlerbehandlung in beiden Modulen
+- 116/116 Tests bestanden
+
+### #064 - 2025-12-13 21:30
+**Aktion:** Wildcard-Pattern `*.egg-info` aus hardcoded Sets entfernt (Verifikationskommentar 2)
+**Warum:** `*.egg-info` funktioniert nicht für direkte Namensvergleiche (early pruning, `_should_ignore`)
+**Ergebnis:**
+- `walker.py`: `*.egg-info` aus DEFAULT_IGNORES entfernt
+- `walker.py`: `DEFAULT_PATHSPEC_PATTERNS: list[str]` NEU für Wildcard-Patterns
+- `walker.py`: Pattern-Kombination erweitert um DEFAULT_PATHSPEC_PATTERNS (nur via PathSpec angewendet)
+- `tree.py`: `*.egg-info` aus IGNORED_DIRS entfernt (war dort ohnehin wirkungslos)
+- `test_walker.py`: `test_walker_ignores_egg_info_directories` NEU: Verifiziert Wildcard-Matching via PathSpec
+- Architektur-Trennung: Exakte Namen in Sets (für O(1) Lookup), Wildcards in separater Liste (für PathSpec)
+- 116/116 Tests bestanden, 100% Coverage für scout Module
+
+### #065 - 2025-12-13 22:00
+**Aktion:** HARD_IGNORES für Re-Include-Unterstützung eingeführt (Verifikationskommentar 1)
+**Warum:** Frühe DEFAULT_IGNORES-Prüfung verhinderte Re-Includes via .gitignore-Negation (`!dist/keep.txt`)
+**Ergebnis:**
+- `walker.py`: `HARD_IGNORES: set[str]` NEU mit `.git`, `.venv`, `__pycache__` (nie re-includierbar)
+- `walker.py`: Early Pruning nutzt jetzt nur HARD_IGNORES statt DEFAULT_IGNORES
+- `walker.py`: DEFAULT_IGNORES gehen vollständig durch PathSpec (unterstützt Negation)
+- `walker.py`: Docstring aktualisiert mit 5 Ignore-Quellen (HARD_IGNORES, IGNORED_FILES, DEFAULT_IGNORES, .gitignore, User Patterns)
+- `test_walker.py`: `test_walker_allows_reinclude_via_gitignore_negation` NEU: Verifiziert `!dist/keep.txt` Re-Include
+- 117/117 Scout-Tests bestanden, 100% Coverage für walker.py
+
+### #066 - 2025-12-13 22:15
+**Aktion:** IGNORED_FILES für .gitignore-Ausschluss eingeführt (Verifikationskommentar 2)
+**Warum:** TreeGenerator ignorierte .gitignore standardmäßig, FileWalker nicht - Inkonsistenz
+**Ergebnis:**
+- `walker.py`: `IGNORED_FILES: set[str] = {".gitignore"}` NEU (konsistent mit tree.py)
+- `walker.py`: walk() prüft `relative_path.name in IGNORED_FILES` nach HARD_IGNORES
+- `walker.py`: Docstring aktualisiert: IGNORED_FILES als zweite Ignore-Quelle dokumentiert
+- `test_walker.py`: `test_walker_excludes_gitignore_file` NEU: Verifiziert .gitignore-Ausschluss
+- Konsistenz erreicht: Beide Module (tree.py, walker.py) behandeln .gitignore identisch
+- 118/118 Scout-Tests bestanden, 100% Coverage für walker.py

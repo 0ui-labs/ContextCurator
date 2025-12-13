@@ -267,6 +267,382 @@ class TestFileWalkerDefaultIgnores:
         for path in paths:
             assert not str(path).startswith("__pycache__")
 
+    def test_walker_excludes_gitignore_file(self, tmp_path: Path) -> None:
+        """Test that .gitignore file itself is excluded from results.
+
+        The .gitignore file is a meta-file that controls ignore patterns,
+        not actual project content. It should be excluded for consistency
+        with TreeGenerator which also excludes .gitignore via IGNORED_FILES.
+        """
+        # Arrange
+        (tmp_path / ".gitignore").write_text("*.tmp")
+        (tmp_path / "main.py").write_text("content")
+        (tmp_path / "README.md").write_text("content")
+        walker = FileWalker()
+
+        # Act
+        result = walker.walk(tmp_path, [])
+
+        # Assert
+        paths = [entry.path for entry in result]
+        # .gitignore should NOT be in results (meta-file)
+        assert Path(".gitignore") not in paths
+        # Regular files should be in results
+        assert Path("main.py") in paths
+        assert Path("README.md") in paths
+
+    def test_walker_reads_local_gitignore(self, tmp_path: Path) -> None:
+        """Test that walker reads and respects local .gitignore file."""
+        # Arrange
+        (tmp_path / ".gitignore").write_text("local_ignore.txt")
+        (tmp_path / "local_ignore.txt").write_text("content")
+        (tmp_path / "should_pass.txt").write_text("content")
+        walker = FileWalker()
+
+        # Act
+        result = walker.walk(tmp_path, [])
+
+        # Assert
+        paths = [entry.path for entry in result]
+        assert Path("should_pass.txt") in paths
+        assert Path("local_ignore.txt") not in paths
+
+    def test_walker_handles_unreadable_gitignore(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that walker gracefully handles unreadable .gitignore file."""
+        # Arrange
+        (tmp_path / ".gitignore").write_text("should_be_ignored.txt")
+        (tmp_path / "should_be_ignored.txt").write_text("content")
+        (tmp_path / "regular_file.txt").write_text("content")
+        walker = FileWalker()
+
+        # Store original read_text
+        original_read_text = Path.read_text
+
+        # Mock read_text to raise OSError when reading .gitignore
+        def mock_read_text(self: Path, encoding: str = "utf-8") -> str:
+            if self.name == ".gitignore":
+                raise OSError("Permission denied")
+            return original_read_text(self, encoding=encoding)
+
+        monkeypatch.setattr(Path, "read_text", mock_read_text)
+
+        # Act
+        result = walker.walk(tmp_path, [])
+
+        # Assert - Both files should be included since .gitignore couldn't be read
+        paths = [entry.path for entry in result]
+        assert Path("regular_file.txt") in paths
+        # should_be_ignored.txt would have been ignored if .gitignore was readable,
+        # but since it failed to read, the file is included
+        assert Path("should_be_ignored.txt") in paths
+
+    def test_walker_gitignore_skips_comments_and_empty_lines(self, tmp_path: Path) -> None:
+        """Test that .gitignore parser skips comments and empty lines."""
+        # Arrange
+        gitignore_content = """
+# This is a comment
+ignored.txt
+
+# Another comment
+*.log
+
+# Final comment
+"""
+        (tmp_path / ".gitignore").write_text(gitignore_content)
+        (tmp_path / "ignored.txt").write_text("content")
+        (tmp_path / "test.log").write_text("content")
+        (tmp_path / "allowed.py").write_text("content")
+        walker = FileWalker()
+
+        # Act
+        result = walker.walk(tmp_path, [])
+
+        # Assert
+        paths = [entry.path for entry in result]
+        assert Path("allowed.py") in paths
+        assert Path("ignored.txt") not in paths
+        assert Path("test.log") not in paths
+
+    def test_walker_ignores_common_junk_polyglot(self, tmp_path: Path) -> None:
+        """Test that walker ignores common junk directories from various ecosystems."""
+        # Arrange - Create junk directories from different language ecosystems
+        # JavaScript/Node.js
+        (tmp_path / "node_modules").mkdir()
+        (tmp_path / "node_modules" / "package.json").write_text("content")
+        # PHP/WordPress
+        (tmp_path / "wp-admin").mkdir()
+        (tmp_path / "wp-admin" / "admin.php").write_text("content")
+        # Dart/Flutter
+        (tmp_path / ".dart_tool").mkdir()
+        (tmp_path / ".dart_tool" / "package_config.json").write_text("content")
+        # Rust/Java
+        (tmp_path / "target").mkdir()
+        (tmp_path / "target" / "debug.log").write_text("content")
+        # Valid file that should be included
+        (tmp_path / "main.py").write_text("content")
+        walker = FileWalker()
+
+        # Act
+        result = walker.walk(tmp_path, [])
+
+        # Assert
+        paths = [entry.path for entry in result]
+        assert Path("main.py") in paths
+        # Verify all junk directories are excluded
+        for path in paths:
+            path_str = str(path)
+            assert not path_str.startswith("node_modules")
+            assert not path_str.startswith("wp-admin")
+            assert not path_str.startswith(".dart_tool")
+            assert not path_str.startswith("target")
+
+    def test_walker_ignores_system_scm_directories(self, tmp_path: Path) -> None:
+        """Test that walker ignores system and SCM directories."""
+        # Arrange
+        (tmp_path / ".svn").mkdir()
+        (tmp_path / ".svn" / "entries").write_text("content")
+        (tmp_path / ".hg").mkdir()
+        (tmp_path / ".hg" / "hgrc").write_text("content")
+        (tmp_path / ".bzr").mkdir()
+        (tmp_path / ".bzr" / "branch.conf").write_text("content")
+        (tmp_path / ".DS_Store").write_text("content")
+        (tmp_path / "Thumbs.db").write_text("content")
+        (tmp_path / "README.md").write_text("content")
+        walker = FileWalker()
+
+        # Act
+        result = walker.walk(tmp_path, [])
+
+        # Assert
+        paths = [entry.path for entry in result]
+        assert Path("README.md") in paths
+        assert len(result) == 1
+        for path in paths:
+            path_str = str(path)
+            assert not path_str.startswith(".svn")
+            assert not path_str.startswith(".hg")
+            assert not path_str.startswith(".bzr")
+            assert "DS_Store" not in path_str
+            assert "Thumbs.db" not in path_str
+
+    def test_walker_ignores_build_directories(self, tmp_path: Path) -> None:
+        """Test that walker ignores common build output directories."""
+        # Arrange
+        (tmp_path / "dist").mkdir()
+        (tmp_path / "dist" / "bundle.js").write_text("content")
+        (tmp_path / "build").mkdir()
+        (tmp_path / "build" / "output.o").write_text("content")
+        (tmp_path / "out").mkdir()
+        (tmp_path / "out" / "compiled.class").write_text("content")
+        (tmp_path / "bin").mkdir()
+        (tmp_path / "bin" / "executable").write_text("content")
+        (tmp_path / "obj").mkdir()
+        (tmp_path / "obj" / "temp.obj").write_text("content")
+        (tmp_path / "src.py").write_text("content")
+        walker = FileWalker()
+
+        # Act
+        result = walker.walk(tmp_path, [])
+
+        # Assert
+        paths = [entry.path for entry in result]
+        assert Path("src.py") in paths
+        assert len(result) == 1
+        for path in paths:
+            path_str = str(path)
+            assert not path_str.startswith("dist")
+            assert not path_str.startswith("build")
+            assert not path_str.startswith("out")
+            assert not path_str.startswith("bin")
+            assert not path_str.startswith("obj")
+
+    def test_walker_ignores_node_web_directories(self, tmp_path: Path) -> None:
+        """Test that walker ignores Node.js and web framework directories."""
+        # Arrange
+        (tmp_path / "bower_components").mkdir()
+        (tmp_path / "bower_components" / "lib.js").write_text("content")
+        (tmp_path / ".next").mkdir()
+        (tmp_path / ".next" / "cache").mkdir()
+        (tmp_path / ".nuxt").mkdir()
+        (tmp_path / ".nuxt" / "dist").mkdir()
+        (tmp_path / ".cache").mkdir()
+        (tmp_path / ".cache" / "webpack").mkdir()
+        (tmp_path / "coverage").mkdir()
+        (tmp_path / "coverage" / "lcov.info").write_text("content")
+        (tmp_path / "app.js").write_text("content")
+        walker = FileWalker()
+
+        # Act
+        result = walker.walk(tmp_path, [])
+
+        # Assert
+        paths = [entry.path for entry in result]
+        assert Path("app.js") in paths
+        assert len(result) == 1
+        for path in paths:
+            path_str = str(path)
+            assert not path_str.startswith("bower_components")
+            assert not path_str.startswith(".next")
+            assert not path_str.startswith(".nuxt")
+            assert not path_str.startswith(".cache")
+            assert not path_str.startswith("coverage")
+
+    def test_walker_ignores_python_directories(self, tmp_path: Path) -> None:
+        """Test that walker ignores Python-specific directories."""
+        # Arrange
+        (tmp_path / "venv").mkdir()
+        (tmp_path / "venv" / "lib").mkdir()
+        (tmp_path / "env").mkdir()
+        (tmp_path / "env" / "bin").mkdir()
+        (tmp_path / ".pytest_cache").mkdir()
+        (tmp_path / ".pytest_cache" / "v").mkdir()
+        (tmp_path / ".mypy_cache").mkdir()
+        (tmp_path / ".mypy_cache" / "3.12").mkdir()
+        (tmp_path / "htmlcov").mkdir()
+        (tmp_path / "htmlcov" / "index.html").write_text("content")
+        (tmp_path / "main.py").write_text("content")
+        walker = FileWalker()
+
+        # Act
+        result = walker.walk(tmp_path, [])
+
+        # Assert
+        paths = [entry.path for entry in result]
+        assert Path("main.py") in paths
+        assert len(result) == 1
+        for path in paths:
+            path_str = str(path)
+            assert not path_str.startswith("venv")
+            assert not path_str.startswith("env")
+            assert not path_str.startswith(".pytest_cache")
+            assert not path_str.startswith(".mypy_cache")
+            assert not path_str.startswith("htmlcov")
+
+    def test_walker_ignores_egg_info_directories(self, tmp_path: Path) -> None:
+        """Test that walker ignores *.egg-info directories via pathspec wildcard matching."""
+        # Arrange - Create egg-info directories (they have dynamic names like package.egg-info)
+        (tmp_path / "mypackage.egg-info").mkdir()
+        (tmp_path / "mypackage.egg-info" / "PKG-INFO").write_text("content")
+        (tmp_path / "mypackage.egg-info" / "SOURCES.txt").write_text("content")
+        (tmp_path / "another_lib.egg-info").mkdir()
+        (tmp_path / "another_lib.egg-info" / "top_level.txt").write_text("content")
+        (tmp_path / "setup.py").write_text("content")
+        walker = FileWalker()
+
+        # Act
+        result = walker.walk(tmp_path, [])
+
+        # Assert
+        paths = [entry.path for entry in result]
+        assert Path("setup.py") in paths
+        assert len(result) == 1
+        for path in paths:
+            assert ".egg-info" not in str(path)
+
+    def test_walker_ignores_java_jvm_directories(self, tmp_path: Path) -> None:
+        """Test that walker ignores Java and JVM-related directories."""
+        # Arrange
+        (tmp_path / ".gradle").mkdir()
+        (tmp_path / ".gradle" / "cache").mkdir()
+        (tmp_path / ".settings").mkdir()
+        (tmp_path / ".settings" / "org.eclipse.jdt.core.prefs").write_text("content")
+        (tmp_path / ".classpath").write_text("content")
+        (tmp_path / ".project").write_text("content")
+        (tmp_path / "Main.java").write_text("content")
+        walker = FileWalker()
+
+        # Act
+        result = walker.walk(tmp_path, [])
+
+        # Assert
+        paths = [entry.path for entry in result]
+        assert Path("Main.java") in paths
+        assert len(result) == 1
+        for path in paths:
+            path_str = str(path)
+            assert not path_str.startswith(".gradle")
+            assert not path_str.startswith(".settings")
+            assert ".classpath" not in path_str
+            assert ".project" not in path_str
+
+    def test_walker_ignores_dotnet_directories(self, tmp_path: Path) -> None:
+        """Test that walker ignores .NET-specific directories."""
+        # Arrange
+        (tmp_path / "packages").mkdir()
+        (tmp_path / "packages" / "NuGet.Core").mkdir()
+        (tmp_path / "TestResults").mkdir()
+        (tmp_path / "TestResults" / "results.trx").write_text("content")
+        (tmp_path / ".vs").mkdir()
+        (tmp_path / ".vs" / "config").mkdir()
+        (tmp_path / "Program.cs").write_text("content")
+        walker = FileWalker()
+
+        # Act
+        result = walker.walk(tmp_path, [])
+
+        # Assert
+        paths = [entry.path for entry in result]
+        assert Path("Program.cs") in paths
+        assert len(result) == 1
+        for path in paths:
+            path_str = str(path)
+            assert not path_str.startswith("packages")
+            assert not path_str.startswith("TestResults")
+            assert not path_str.startswith(".vs")
+
+    def test_walker_ignores_ide_directories(self, tmp_path: Path) -> None:
+        """Test that walker ignores IDE-specific directories."""
+        # Arrange
+        (tmp_path / ".idea").mkdir()
+        (tmp_path / ".idea" / "workspace.xml").write_text("content")
+        (tmp_path / ".vscode").mkdir()
+        (tmp_path / ".vscode" / "settings.json").write_text("content")
+        (tmp_path / "code.py").write_text("content")
+        walker = FileWalker()
+
+        # Act
+        result = walker.walk(tmp_path, [])
+
+        # Assert
+        paths = [entry.path for entry in result]
+        assert Path("code.py") in paths
+        assert len(result) == 1
+        for path in paths:
+            path_str = str(path)
+            assert not path_str.startswith(".idea")
+            assert not path_str.startswith(".vscode")
+
+    def test_walker_allows_reinclude_via_gitignore_negation(self, tmp_path: Path) -> None:
+        """Test that walker allows re-including files via .gitignore negation patterns.
+
+        The dist/ directory is in DEFAULT_IGNORES, but a negation pattern like
+        !dist/keep.txt should allow specific files to be re-included.
+        """
+        # Arrange
+        # Create .gitignore with negation pattern to re-include specific file
+        (tmp_path / ".gitignore").write_text("!dist/keep.txt\n")
+        # Create dist directory (normally ignored by DEFAULT_IGNORES)
+        (tmp_path / "dist").mkdir()
+        (tmp_path / "dist" / "bundle.js").write_text("ignored content")
+        (tmp_path / "dist" / "keep.txt").write_text("re-included content")
+        # Create a normal file
+        (tmp_path / "main.py").write_text("content")
+        walker = FileWalker()
+
+        # Act
+        result = walker.walk(tmp_path, [])
+
+        # Assert
+        paths = [entry.path for entry in result]
+        # main.py should be included
+        assert Path("main.py") in paths
+        # dist/keep.txt should be re-included via negation pattern
+        assert Path("dist/keep.txt") in paths
+        # dist/bundle.js should still be ignored
+        assert Path("dist/bundle.js") not in paths
+
 
 class TestFileWalkerMetadata:
     """Test suite for metadata calculation."""

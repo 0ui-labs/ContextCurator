@@ -11,8 +11,90 @@ import pathspec
 
 from codemap.scout.models import TreeReport
 
-# Directories to always ignore
-IGNORED_DIRS: set[str] = {".git", ".venv", "__pycache__"}
+# Directories to always ignore (polyglot defaults for common ecosystems)
+IGNORED_DIRS: set[str] = {
+    # --- System / SCM ---
+    ".git",
+    ".svn",
+    ".hg",
+    ".fslckout",
+    "_darcs",
+    ".bzr",
+    ".DS_Store",
+    "Thumbs.db",
+    # --- General Build / Dependencies ---
+    "dist",
+    "build",
+    "out",
+    "target",
+    "bin",
+    "obj",
+    "vendor",  # PHP (Composer), Go, Ruby
+    # --- Node / Web / JS / TS ---
+    "node_modules",
+    "bower_components",
+    ".npm",
+    ".yarn",
+    ".pnpm-store",
+    ".next",
+    ".nuxt",
+    ".output",
+    ".astro",
+    ".svelte-kit",
+    ".vercel",
+    ".netlify",
+    ".cache",
+    ".parcel-cache",
+    ".turbo",
+    "coverage",
+    ".nyc_output",
+    # --- Python ---
+    ".venv",
+    "venv",
+    "env",
+    ".env",
+    "virtualenv",
+    "__pycache__",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache",
+    ".hypothesize",
+    "htmlcov",
+    ".coverage",
+    "cover",
+    ".tox",
+    ".nox",
+    "site-packages",
+    # --- PHP / WordPress ---
+    ".phpunit.cache",
+    ".php-cs-fixer.cache",
+    "wp-admin",
+    "wp-includes",  # WordPress Core
+    # --- Dart / Flutter ---
+    ".dart_tool",
+    ".pub-cache",
+    ".flutter-plugins",
+    ".flutter-plugins-dependencies",
+    # --- Java / JVM ---
+    ".gradle",
+    "gradle",
+    ".settings",
+    ".classpath",
+    ".project",
+    # --- .NET ---
+    "packages",
+    "TestResults",
+    ".vs",
+    # --- C / C++ ---
+    "cmake-build-debug",
+    "cmake-build-release",
+    "CMakeFiles",
+    # --- Go ---
+    "pkg",
+    # --- IDEs ---
+    ".idea",
+    ".vscode",
+}
 
 # Files to always ignore (meta-files)
 IGNORED_FILES: set[str] = {".gitignore"}
