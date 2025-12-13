@@ -835,3 +835,30 @@
   - 3 Test-Dateien in `tests/unit/mapper/`
   - 3 Planungsdokumente in `dev/phase-08/`
   - 207/207 Tests, 100% Coverage, alle Quality Gates bestanden
+
+### #075 - 2025-12-13 17:00
+**Aktion:** ParserEngine API harmonisiert (Verifikationskommentar)
+**Warum:** `get_language_id(Path)` und `parse(Literal["python"])` hatten inkonsistente Spracheingaben
+**Ergebnis:**
+- `engine.py`: `parse(language: Literal["python"])` → `parse(language_id: str)`
+- `engine.py`: `parse_file(path: Path, code: str | None = None)` NEU - kombiniert get_language_id + parse
+- `engine.py`: Runtime-Validierung mit klarer Fehlermeldung bei unbekannter Sprache
+- `engine.py`: type: ignore für tree-sitter-language-pack Literal-Erwartung (runtime-validiert)
+- `test_engine.py`: Alle `language="python"` → `language_id="python"`
+- `test_engine.py`: `TestParseFile` Klasse NEU mit 5 Tests
+- 18/18 Tests bestanden, 100% Coverage, mypy/ruff clean
+
+### #076 - 2025-12-13 17:30
+**Aktion:** LANGUAGE_QUERIES als Single Source of Truth eingeführt (Verifikationskommentar)
+**Warum:** LANGUAGE_MAP nur für Extensions genutzt, hardcodierte "python"-Checks in parse() erschwerten Erweiterbarkeit
+**Ergebnis:**
+- `engine.py`: `LANGUAGE_QUERIES: dict[str, str]` NEU - mappt language_id → Query-String
+- `engine.py`: `get_supported_languages()` NEU - gibt Set der unterstützten Sprachen zurück
+- `engine.py`: `parse()` validiert gegen LANGUAGE_QUERIES statt hardcoded "python"
+- `engine.py`: Query-String wird dynamisch aus LANGUAGE_QUERIES geladen
+- `engine.py`: Klassen-Docstring erweitert um Extensibility-Anleitung
+- `__init__.py`: LANGUAGE_MAP, LANGUAGE_QUERIES, get_supported_languages exportiert
+- `test_engine.py`: `TestLanguageConfiguration` Klasse NEU mit 4 Tests
+  - Validiert LANGUAGE_MAP ↔ LANGUAGE_QUERIES Konsistenz
+- 22/22 Tests bestanden, 100% Coverage, mypy/ruff clean
+- **Erweiterbarkeit:** Neue Sprache nur durch Hinzufügen zu LANGUAGE_MAP + LANGUAGE_QUERIES
