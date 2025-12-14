@@ -37,3 +37,6 @@ dmypy.json
 
 # Ruff
 .ruff_cache/
+
+# Demo output
+output/
