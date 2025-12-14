@@ -1,7 +1,22 @@
-"""MapBuilder for orchestrating code map construction.
+"""Code mapping orchestration engine.
 
-This module provides the MapBuilder class which coordinates all components
-to build a complete code relationship graph from a project directory.
+This module provides the MapBuilder class for end-to-end code graph construction,
+orchestrating file discovery, content reading, parsing, and graph building.
+
+Key Components:
+    - FileWalker: Discovers Python files with ignore pattern support
+    - ContentReader: Reads file content with encoding fallback
+    - ParserEngine: Extracts code structure via tree-sitter
+    - GraphManager: Builds and persists relationship graph
+
+Typical Usage:
+    >>> from pathlib import Path
+    >>> from codemap.engine import MapBuilder
+    >>>
+    >>> builder = MapBuilder()
+    >>> graph_manager = builder.build(Path("src"))
+    >>> print(graph_manager.graph_stats)
+    {'nodes': 42, 'edges': 38}
 """
 
 import logging
@@ -25,11 +40,51 @@ class MapBuilder:
     - CONTAINS edges linking files to their code elements
     - IMPORTS edges representing module dependencies
 
+    Architecture:
+        The build process follows a pipeline pattern:
+        1. FileWalker discovers Python files (respects .gitignore patterns)
+        2. For each file, ContentReader reads content with encoding fallback
+        3. ParserEngine extracts code structure via tree-sitter
+        4. GraphManager receives nodes and edges for graph construction
+
+    Performance:
+        Optimized for small to medium codebases (up to ~10,000 files).
+        Processing time scales linearly with file count. For larger codebases,
+        consider batching or parallel processing with separate MapBuilder instances.
+
+    Thread Safety:
+        MapBuilder instances are NOT thread-safe. Create separate instances
+        per thread for parallel processing. Each build() call reinitializes
+        the internal GraphManager for fresh analysis.
+
+    Error Handling:
+        Per-file errors are isolated and logged as warnings:
+        - ContentReadError: Logged and file skipped (binary/encoding issues)
+        - ValueError from parser: Logged and file skipped (unsupported language)
+        The build continues with remaining files after any error.
+
     Example:
-        >>> builder = MapBuilder()
-        >>> graph_manager = builder.build(Path("/path/to/project"))
-        >>> print(graph_manager.graph_stats)
-        {'nodes': 10, 'edges': 15}
+        Complete workflow for building and inspecting a code graph::
+
+            from pathlib import Path
+            from codemap.engine import MapBuilder
+
+            # Initialize builder
+            builder = MapBuilder()
+
+            # Build graph from project
+            graph_manager = builder.build(Path("src"))
+
+            # Inspect results
+            print(graph_manager.graph_stats)  # {'nodes': 10, 'edges': 15}
+
+            # Query specific relationships
+            for node_id, attrs in graph_manager.graph.nodes(data=True):
+                if attrs.get("type") == "function":
+                    print(f"Function: {attrs.get('name')}")
+
+            # Save for later use
+            graph_manager.save(Path("codemap.json"))
     """
 
     def __init__(self) -> None:
@@ -59,13 +114,28 @@ class MapBuilder:
         in self._graph.
 
         Args:
-            root: Root directory of the project to analyze.
+            root: Root directory of the project to analyze. Must be an existing
+                directory path. Relative paths are resolved against the current
+                working directory.
 
         Returns:
-            GraphManager instance (self._graph) containing the complete code map graph.
+            GraphManager instance containing the complete code map graph with:
+            - File nodes (type="file") with size and token_est attributes
+            - Code nodes (type="function"|"class") with name, start_line, end_line
+            - CONTAINS edges linking files to their code elements
+            - IMPORTS edges representing resolved module dependencies
 
         Raises:
-            ValueError: If root does not exist or is not a directory.
+            ValueError: If root does not exist (message: "Path does not exist")
+                or is not a directory (message: "Path is not a directory").
+
+        Example:
+            >>> builder = MapBuilder()
+            >>> graph = builder.build(Path("src"))
+            >>> assert graph.graph_stats["nodes"] > 0
+            >>> file_nodes = [n for n, a in graph.graph.nodes(data=True)
+            ...               if a.get("type") == "file"]
+            >>> assert len(file_nodes) > 0
         """
         # Input validation
         if not root.exists():
@@ -130,26 +200,38 @@ class MapBuilder:
         """Resolve import name to file path and add dependency edge.
 
         Attempts to resolve an import module name to an actual file path in the
-        scanned project by trying multiple resolution strategies:
-        1. Simple module name in same directory (e.g., "utils" -> "utils.py")
-        2. Dotted module name as path (e.g., "codemap.scout.walker" -> "codemap/scout/walker.py")
-        3. Package import with __init__.py (e.g., "pkg" -> "pkg/__init__.py")
+        scanned project by trying multiple resolution strategies in order:
+
+        Resolution Strategies:
+            1. **Same-directory lookup**: Simple module name in same directory
+               (e.g., "utils" -> "{source_dir}/utils.py")
+            2. **Dotted path conversion**: Dotted module as path from root
+               (e.g., "codemap.scout.walker" -> "codemap/scout/walker.py")
+            3. **Package __init__.py (same dir)**: Package in same directory
+               (e.g., "pkg" -> "{source_dir}/pkg/__init__.py")
+            4. **Package __init__.py (from root)**: Package from root
+               (e.g., "codemap.scout" -> "codemap/scout/__init__.py")
 
         If a matching file is found in the graph nodes, adds an IMPORTS dependency
         edge from source_file to the resolved target file. Silently skips imports
         that cannot be resolved (external modules or non-existent files).
 
         Args:
-            root: Root directory of the project being analyzed
-            source_file: Path to the file containing the import statement (relative to root)
-            import_name: Module name from the import (e.g., "utils", "codemap.scout.walker")
+            root: Root directory of the project being analyzed (unused but kept
+                for potential future resolution enhancements).
+            source_file: Path to the file containing the import statement,
+                expressed as a relative path from root.
+            import_name: Module name from the import statement
+                (e.g., "utils", "codemap.scout.walker", "os").
 
         Returns:
-            None
+            None. Adds IMPORTS edge to self._graph if resolved successfully.
 
-        Note:
-            Silently skips unresolved imports - external stdlib/third-party modules
-            are not added as dependencies.
+        Limitations:
+            - Only resolves imports to files already in the graph
+            - External stdlib/third-party modules are silently skipped
+            - Does not infer __init__.py for all package structures
+            - Relative imports (from . import X) not directly supported
         """
         # Normalize source_file to string for graph node ID (relative path)
         source_file_id = str(source_file)
@@ -161,7 +243,7 @@ class MapBuilder:
             self._graph.add_dependency(source_file_id, same_dir_id)
             return
 
-        # Strategy 2: Dotted name as path (e.g., "codemap.scout.walker" -> "codemap/scout/walker.py")
+        # Strategy 2: Dotted name as path (e.g., "a.b.c" -> "a/b/c.py")
         dotted_path = Path(import_name.replace(".", "/")).with_suffix(".py")
         dotted_id = str(dotted_path)
         if dotted_id in self._graph.graph.nodes:

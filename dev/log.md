@@ -1095,3 +1095,81 @@
 - `builder.py`: Docstrings aktualisiert (Lifecycle-Verhalten dokumentiert)
 - `test_builder.py`: Obsoleter Test `test_resolve_with_none_graph` entfernt
 - 21/21 Tests bestanden, 100% Coverage für builder.py
+
+## Phase 11: MapBuilder - TDD REFACTOR Phase (100% Coverage & Code-Qualität)
+
+### #094 - 2025-12-14 21:00
+**Aktion:** Refactor-Phase Docstrings und Quality Checks (Plan Step 6-9)
+**Warum:** Plan erforderte umfassende Docstrings (Architecture, Performance, Thread Safety, Example) und strikte Quality Checks
+**Ergebnis:**
+- `builder.py` Modul-Docstring: Key Components, Typical Usage mit vollständigem Beispiel
+- `builder.py` Klassen-Docstring: 6 Sections (Architecture, Performance, Thread Safety, Error Handling, Example)
+- `builder.py` `build()` Docstring: Detaillierte Args, Returns (4 Node/Edge-Typen), Raises, Example
+- `builder.py` `_resolve_and_add_import()` Docstring: 4 Resolution Strategies, Limitations Section
+- `test_builder.py` Modul-Docstring: Test Organization (5 Klassen), Coverage, Test Patterns
+- Type-Annotations: `dict[str, dict[str, Any]]` für NetworkX-Node-Attribute
+- mypy --strict: Success (beide Dateien), ruff check: All checks passed
+- 21/21 Tests bestanden, 100% Coverage für builder.py
+
+### #095 - 2025-12-14 21:30
+**Aktion:** Boundary-Tests für große Strukturen und zirkuläre Importe hinzugefügt (Verifikationskommentar)
+**Warum:** Plan erforderte TestMapBuilderBoundaryCases mit Skalierbarkeits- und Circular-Import-Tests
+**Ergebnis:**
+- `test_builder.py`: `TestMapBuilderBoundaryCases` Klasse NEU mit 4 Tests
+  - `test_build_handles_large_directory_structure`: 60 Python-Dateien in 6 Verzeichnissen, prüft Node/Edge-Counts
+  - `test_build_handles_deep_nesting`: 10-Ebenen tiefe Verschachtelung, prüft Discovery aller Levels
+  - `test_build_handles_circular_imports`: a.py↔b.py zirkuläre Imports, beide IMPORTS-Kanten vorhanden
+  - `test_build_handles_many_imports`: main.py mit 20 Imports, alle Dependency-Edges aufgelöst
+- Modul-Docstring aktualisiert: TestMapBuilderBoundaryCases in Test Organization aufgenommen
+- 25/25 Tests bestanden, mypy/ruff clean
+
+### #096 - 2025-12-14 21:45
+**Aktion:** ContentReadError Log-Verifikation im Test hinzugefügt (Verifikationskommentar)
+**Warum:** `test_build_catches_content_read_errors` prüfte nicht explizit die Warning-Log-Ausgabe
+**Ergebnis:**
+- `test_builder.py` `test_build_catches_content_read_errors` ERWEITERT:
+  - `assert len(caplog.records) > 0` für Fallback bei fehlender Warning
+  - Filter nach `record.levelname == "WARNING"`
+  - `assert any("binary.py" in msg for msg in warning_messages)` für Dateinamen-Prüfung
+- Konsistent mit `test_build_catches_parsing_errors` Pattern
+- 25/25 Tests bestanden, Log-Verifikation vollständig
+
+## Phase 11: Engine Module Exports und Integration finalisieren
+
+### #097 - 2025-12-14 22:50
+**Aktion:** Engine Module Exports und Demo Script erstellt (Plan 04)
+**Warum:** Plan erfordert Public API Export und Demo-Script für MapBuilder-Integration
+**Ergebnis:**
+- `src/codemap/engine/__init__.py` ERSTELLT:
+  - Kompakter Modul-Docstring (1 Zeile, analog zu graph/__init__.py)
+  - `from codemap.engine.builder import MapBuilder`
+  - `__all__ = ["MapBuilder"]`
+- `tests/unit/engine/test_engine_init.py` NEU: 3 Tests für Module Exports
+  - `test_mapbuilder_import`: Import-Verifikation
+  - `test_module_all_exports`: __all__-Liste Validierung
+  - `test_mapbuilder_is_correct_class`: Klassenidentität-Check
+- `demo_builder.py` NEU im Root-Verzeichnis:
+  - argparse CLI mit optionalem `root` Positionsargument
+  - Smart Default: `./src` falls vorhanden, sonst `cwd()`
+  - 5 Phasen: Init, Build, Stats, Save, Sample Data, Summary
+  - Defensive Fallbacks: `dict.get()`, leere-Listen-Checks
+  - Timing-Messungen für Build und Gesamt
+- 28/28 Engine-Tests bestanden, Demo-Verifikation erfolgreich
+
+### #098 - 2025-12-14 23:00
+**Aktion:** Review-Feedback für Engine Module implementiert
+**Warum:** 3 Verifikationskommentare für Code-Qualität und Robustheit
+**Ergebnis:**
+1. **Docstring gekürzt** (Kommentar 1):
+   - `engine/__init__.py`: Kompakter 1-Satz-Docstring analog zu anderen Modulen
+   - Redundante Details entfernt (bereits im MapBuilder-Docstring dokumentiert)
+2. **CLI und Smart Default** (Kommentar 2):
+   - `demo_builder.py`: `argparse` mit optionalem `root` Argument
+   - Priorität: CLI > `./src` (falls vorhanden) > `cwd()`
+   - `get_root_path()` Hilfsfunktion mit Existenz-Validierung
+3. **Defensive Fallbacks** (Kommentar 3):
+   - `stats.get('nodes', 0)` statt `stats['nodes']`
+   - `graph.nodes.get(node_id, {})` statt `graph.nodes[node_id]`
+   - Leere-Listen-Checks mit verständlichen Meldungen
+- Demo-Performance: ~0.02s für `src/` (67 Knoten) statt ~0.4s für Root (515 Knoten)
+- 28/28 Tests bestanden, alle Quality Gates erfüllt
