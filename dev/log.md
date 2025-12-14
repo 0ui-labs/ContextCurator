@@ -1010,3 +1010,88 @@
   - **save**: OSError-Raise dokumentiert, Beispiel mit Verzeichniserstellung
   - **load**: Returns: None, 3 Raises (FileNotFoundError, 2x ValueError), Beispiel mit Identitäts-Verifikation
 - 36/36 Tests bestanden, 100% Coverage, mypy/ruff clean
+
+## Phase 11: Engine Module - MapBuilder Integration
+
+### #088 - 2025-12-14 18:00
+**Aktion:** MapBuilder Integration Test erstellt (TDD RED Phase)
+**Warum:** Plan 01 Phase 11 erfordert Integration Test der vollständigen Build-Pipeline vor Implementation
+**Ergebnis:**
+- `tests/unit/engine/__init__.py` NEU: Test-Package-Marker
+- `tests/unit/engine/test_builder.py` NEU: Integration Test für MapBuilder
+  - `TestMapBuilderIntegration.test_build_creates_complete_graph`: Testet vollständigen Workflow
+  - Temporäre Dateien: `utils.py` mit `helper_function`, `main.py` mit Import und `main` Funktion
+  - Assertions: File Nodes, Code Nodes, CONTAINS Edges, IMPORTS Edge, Graph Statistics
+  - Comprehensive Docstrings mit AAA-Pattern
+- RED Phase verifiziert: `ModuleNotFoundError: No module named 'codemap.engine'`
+
+### #089 - 2025-12-14 18:30
+**Aktion:** MapBuilder implementiert (TDD GREEN Phase)
+**Warum:** Plan erfordert Orchestrierung von FileWalker, ParserEngine, GraphManager
+**Ergebnis:**
+- `src/codemap/engine/__init__.py` NEU: Module mit MapBuilder Export
+- `src/codemap/engine/builder.py` NEU: MapBuilder Klasse mit:
+  - `__init__()`: Initialisiert FileWalker und ParserEngine
+  - `build(root: Path) -> GraphManager`: Orchestriert vollständigen Workflow
+    - Walk: FileWalker.walk() für FileEntry-Liste
+    - Add Files: GraphManager.add_file() für jeden Entry
+    - Parse: ParserEngine.parse_file() für Code-Extraktion
+    - Add Nodes: GraphManager.add_node() für Functions/Classes
+    - Resolve Imports: Modul-Name → File-ID Mapping, add_dependency()
+  - Import-Auflösung: `module_to_file` Dict für `from X import Y` → X.py Dependency
+- `graph_stats` Keys korrigiert: `"nodes"`/`"edges"` statt `"node_count"`/`"edge_count"`
+- 185/185 Tests bestanden, Test GRÜN
+
+### #090 - 2025-12-14 19:00
+**Aktion:** Test-Assertions gelockert (Verifikationskommentar)
+**Warum:** Strikte Assertions auf exakte Node-Counts und hardcoded IDs verletzten API-Kontrakt-Grenzen
+**Ergebnis:**
+- `tests/unit/engine/test_builder.py` REFACTORED:
+  - **Node-Discovery**: Iteriert über `graph.nodes(data=True)` statt hardcoded IDs
+  - **File-Nodes**: `nid.endswith("main.py")` statt `"main.py" in nodes`
+  - **Code-Nodes**: Suche via `attrs.get("name") == "helper_function"`
+  - **Graph-Stats**: `>= 4` Nodes, `>= 3` Edges statt exakter Counts
+  - **ID-Format-Validierung**: `"::" in node_id` für Code-Nodes (API-Kontrakt)
+  - Assertions für IMPORTS/CONTAINS Edges beibehalten
+- Docstring aktualisiert: "Assertions use attribute-based discovery"
+- 185/185 Tests bestanden, flexiblere API-Kontrakt-Prüfung
+
+### #091 - 2025-12-14 20:00
+**Aktion:** MapBuilder vollständig implementiert mit TDD (Phase 11 GREEN Phase)
+**Warum:** Plan erforderte vollständige Unit-, Integration- und Failure-Mode-Tests mit 100% Coverage
+**Ergebnis:**
+- `src/codemap/engine/builder.py` ERWEITERT:
+  - Input-Validierung: `root.exists()` und `root.is_dir()` mit ValueError
+  - Logging: `logger = logging.getLogger(__name__)` für Fehlerbehandlung
+  - `_resolve_and_add_import()`: 4 Resolution-Strategien (same-dir, dotted-path, package-init, root-package)
+  - ContentReader Integration: `self._reader.read_file()` mit ContentReadError-Handling
+  - GraphManager als Instanz-Variable: Non-optional `self._graph: GraphManager`
+- `tests/unit/engine/test_builder.py` ERWEITERT: 21 Tests in 4 Klassen
+  - TestMapBuilderIntegration (3): Full workflow, graph statistics, import chain
+  - TestMapBuilderBuild (7): Valid path, nonexistent path, file instead of dir, parsing errors, read errors, empty dir, non-Python files
+  - TestResolveAndAddImport (7): Simple module, dotted module, relative import, package import, unresolved, external, dotted package from root
+  - TestMapBuilderFailureModeIntegration (4): Corrupt file, parser exception, permission error, mixed success/failure
+- 21/21 Tests bestanden, 100% Coverage für builder.py
+
+### #092 - 2025-12-14 20:30
+**Aktion:** ContentReader Integration in MapBuilder (Verifikationskommentar)
+**Warum:** Direkte `file_path.read_text()` Nutzung war weniger robust als ContentReader mit Encoding-Fallback
+**Ergebnis:**
+- `builder.py`: Import `ContentReader, ContentReadError` aus `codemap.mapper.reader`
+- `builder.py`: `self._reader = ContentReader()` in `__init__`
+- `builder.py`: `self._reader.read_file(file_path)` statt `file_path.read_text()`
+- `builder.py`: Exception-Handling: `ContentReadError` statt `OSError/UnicodeDecodeError`
+- Class-Docstring: Alle 4 Komponenten dokumentiert (FileWalker, ContentReader, ParserEngine, GraphManager)
+- 21/21 Tests bestanden, 100% Coverage
+
+### #093 - 2025-12-14 20:45
+**Aktion:** GraphManager als Instanz-Variable in MapBuilder (Verifikationskommentar)
+**Warum:** Lazy-Initialization mit `None`-Type war inkonsistent mit anderen Komponenten
+**Ergebnis:**
+- `builder.py`: `self._graph: GraphManager = GraphManager()` in `__init__` (non-optional)
+- `builder.py`: `self._graph = GraphManager()` in `build()` für Reinitialisierung
+- `builder.py`: Alle `graph_manager` Referenzen → `self._graph`, return `self._graph`
+- `builder.py`: None-Check in `_resolve_and_add_import()` entfernt (nicht mehr nötig)
+- `builder.py`: Docstrings aktualisiert (Lifecycle-Verhalten dokumentiert)
+- `test_builder.py`: Obsoleter Test `test_resolve_with_none_graph` entfernt
+- 21/21 Tests bestanden, 100% Coverage für builder.py
