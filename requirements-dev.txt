@@ -13,6 +13,7 @@ pytest-cov
 pytest-sugar
 ruff
 mypy
+types-networkx
 
 # Documentation
 mkdocs-material

@@ -874,3 +874,139 @@
   - `orjson>=3.9.0` - Schnelle JSON-Serialisierung für CodeNode-Modelle
 - Installation verifiziert: `orjson 3.11.5`, `networkx 3.6`
 - 216/216 Tests bestanden, 100% Coverage, keine Regressionen
+
+## Phase 10: Graph Module - GraphManager Grundgerüst
+
+### #078 - 2025-12-13 18:30
+**Aktion:** GraphManager Grundgerüst implementiert (TDD RED Phase)
+**Warum:** Plan 01 Phase 10 erfordert Skeleton für NetworkX-basierte Code-Beziehungsgraphen
+**Ergebnis:**
+- `src/codemap/graph/__init__.py` NEU: Module mit GraphManager Export
+- `src/codemap/graph/manager.py` NEU: GraphManager Klasse mit:
+  - `__init__()`: Initialisiert leeren `nx.DiGraph[str]`
+  - `graph` Property: Read-only Zugriff auf internen Graph
+  - Umfassende Docstrings (Architecture, Example, Thread Safety Sections)
+- `tests/unit/graph/__init__.py` NEU: Test-Package-Marker
+- `tests/unit/graph/test_manager.py` NEU: 9 Tests in 3 Klassen
+  - TestGraphModuleExports (2): Export-Validierung
+  - TestGraphManagerInitialization (3): Klassenerstellung, leerer Graph
+  - TestGraphProperty (4): DiGraph-Typ, Same-Object, String-Nodes
+- `pyproject.toml`: `networkx>=3.0` zu dependencies hinzugefügt
+- `requirements-dev.txt`: `types-networkx` für mypy Typing-Support
+- 226/226 Tests bestanden, 100% Coverage, mypy/ruff clean
+
+### #079 - 2025-12-13 18:45
+**Aktion:** Unbenutzten pytest-Import entfernt (Verifikationskommentar)
+**Warum:** Ruff F401 Linting-Fehler durch unbenutzten Import
+**Ergebnis:**
+- `tests/unit/graph/test_manager.py`: `import pytest` entfernt
+- Ruff check: All checks passed
+- 226/226 Tests bestanden, 100% Coverage
+
+### #080 - 2025-12-14 12:00
+**Aktion:** GraphManager RED Phase Tests implementiert (TDD)
+**Warum:** Plan 02 Phase 10 definierte API-Vertrag für GraphManager mit Tests vor Implementation
+**Ergebnis:**
+- `tests/unit/graph/test_manager.py` ERWEITERT: 27 Tests in 7 Klassen
+  - TestGraphManagerBasic (4): add_file, duplicate paths, relative paths
+  - TestGraphManagerHierarchy (5): add_node, CONTAINS edges, add_dependency, IMPORTS edges, orphan node error
+  - TestGraphManagerPersistence (5): save/load roundtrip, FileNotFoundError, invalid JSON
+  - TestGraphManagerStats (4): graph_stats property mit nodes/edges counts
+- RED Phase verifiziert: 10 PASSED, 17 FAILED (`AttributeError: 'GraphManager' object has no attribute 'add_file'`)
+
+### #081 - 2025-12-14 12:15
+**Aktion:** GraphManager GREEN Phase - Alle Methoden implementiert
+**Warum:** TDD GREEN Phase erfordert Implementation aller durch Tests definierten APIs
+**Ergebnis:**
+- `src/codemap/graph/manager.py` ERWEITERT:
+  - `add_file(entry: FileEntry)`: Node mit type="file", size, token_est Attributen
+  - `add_node(parent_file_id, node: CodeNode)`: Code-Node mit CONTAINS-Edge, ValueError wenn Parent fehlt
+  - `add_dependency(source, target)`: IMPORTS-Edge zwischen Files
+  - `save(path: Path)`: orjson + json_graph.node_link_data Serialisierung
+  - `load(path: Path)`: FileNotFoundError, ValueError bei invalid JSON, json_graph.node_link_graph
+  - `graph_stats` Property: {"nodes": n, "edges": e} Dictionary
+- Imports hinzugefügt: `orjson`, `json_graph`, `Path`, TYPE_CHECKING für `FileEntry`/`CodeNode`
+- 27/27 Tests bestanden, 100% Coverage für graph Module
+
+### #082 - 2025-12-14 13:00
+**Aktion:** GraphManager Plan-Konformität vervollständigt (TDD GREEN Phase Finalisierung)
+**Warum:** Code-Review identifizierte fehlende Tests und Funktionalität laut Plan
+**Ergebnis:**
+- `tests/unit/graph/test_manager.py` ERWEITERT: 5 neue Tests hinzugefügt
+  - `test_add_node_duplicate_updates_attributes`: Duplikat-Code-Nodes aktualisieren Attribute
+  - `test_add_dependency_duplicate_ignored`: Duplikat-Edges werden ignoriert
+  - `test_add_dependency_without_source_node`: ValueError bei fehlendem Source-Node
+  - `test_add_dependency_without_target_node`: ValueError bei fehlendem Target-Node
+  - `test_save_creates_parent_directories`: Parent-Directories werden automatisch erstellt
+- `src/codemap/graph/manager.py` ERWEITERT:
+  - `add_dependency()`: Validierung für Source/Target-Node-Existenz mit ValueError
+  - `save()`: `path.parent.mkdir(parents=True, exist_ok=True)` für automatische Verzeichniserstellung
+  - `load()`: `directed=True` Parameter bei `node_link_graph()` für explizite Klarheit
+- 32/32 Tests bestanden, 100% Coverage für graph Module, mypy/ruff clean
+
+### #083 - 2025-12-14 13:15
+**Aktion:** Edge-Attribut von `label` zu `relationship` geändert (Verifikationskommentar)
+**Warum:** Plan spezifizierte `relationship` als Attribut-Key, Implementation nutzte `label`
+**Ergebnis:**
+- `src/codemap/graph/manager.py`:
+  - `add_node()`: `label="CONTAINS"` → `relationship="CONTAINS"`
+  - `add_dependency()`: `label="IMPORTS"` → `relationship="IMPORTS"`
+- `tests/unit/graph/test_manager.py`: 4 Assertions aktualisiert
+  - `["label"]` → `["relationship"]` an allen Stellen
+- Konsistenz mit Plan-Spezifikation erreicht
+- 32/32 Tests bestanden, 100% Coverage für graph Module
+
+## Phase 10: GraphManager - TDD REFACTOR Phase
+
+### #084 - 2025-12-14 14:30
+**Aktion:** load() Graph-Identität erhalten (Verifikationskommentar)
+**Warum:** `self._graph = json_graph.node_link_graph(data)` ersetzte die Graph-Instanz, externe Referenzen wurden ungültig
+**Ergebnis:**
+- `src/codemap/graph/manager.py` REFACTORED:
+  - `load()`: Erstellt temporären Graph, `self._graph.clear()`, kopiert Nodes/Edges mit Attributen
+  - Externe Referenzen via `manager.graph` bleiben nach `load()` gültig
+  - Docstring erweitert: "Preserves the identity of self._graph"
+- `tests/unit/graph/test_manager.py`: `test_load_preserves_graph_identity` NEU
+  - Verifiziert `graph_before is graph_after` nach load()
+  - Verifiziert Content-Update trotz gleicher Instanz
+- 33/33 Tests bestanden, 100% Coverage für graph Module
+
+### #085 - 2025-12-14 14:45
+**Aktion:** load() semantische JSON-Validierung hinzugefügt (Verifikationskommentar)
+**Warum:** Nur syntaktisch invalides JSON wurde abgefangen, nicht semantisch ungültige node_link_data-Strukturen
+**Ergebnis:**
+- `src/codemap/graph/manager.py` ERWEITERT:
+  - `json_graph.node_link_graph()` in try/except für `(KeyError, TypeError, ValueError)`
+  - Einheitlicher `ValueError` mit "Invalid graph schema" Nachricht, Original als `__cause__`
+  - Docstring erweitert: "ValueError: If ... invalid graph schema"
+- `tests/unit/graph/test_manager.py`: `test_load_invalid_graph_schema_raises_error` NEU
+  - Schreibt valide JSON mit ungültiger Struktur (`{"foo": "bar"}`)
+  - Verifiziert `ValueError` mit "Invalid graph schema" Match
+- 34/34 Tests bestanden, 100% Coverage für graph Module
+
+### #086 - 2025-12-14 15:00
+**Aktion:** Edge-Case-Tests für leere Graphen und Attribut-Erhalt hinzugefügt (Verifikationskommentar)
+**Warum:** Plan erforderte explizite Tests für Boundary Conditions und Data Integrity
+**Ergebnis:**
+- `tests/unit/graph/test_manager.py` ERWEITERT:
+  - `test_empty_graph_save_and_load` NEU: Speichert/lädt leeren Graph, verifiziert `{"nodes": 0, "edges": 0}`
+  - `test_save_and_load_preserves_all_attributes` NEU: Umfassender Attribut-Erhalt-Test
+    - File-Attribute: `size`, `token_est`
+    - Code-Node-Attribute: `type`, `name`, `start_line`, `end_line`
+    - Edge-Attribute: `relationship` (CONTAINS, IMPORTS)
+    - Konkrete Node-IDs: `"src/app.py::main"`, `"src/app.py::AppController"`, `"src/utils.py::helper"`
+- 36/36 Tests bestanden, 100% Coverage für graph Module
+
+### #087 - 2025-12-14 15:15
+**Aktion:** GraphManager Docstrings vollständig überarbeitet (Verifikationskommentar)
+**Warum:** Plan erforderte explizite Args/Returns/Raises/Examples für alle Public APIs
+**Ergebnis:**
+- `src/codemap/graph/manager.py` Docstrings ÜBERARBEITET:
+  - **Klassen-Docstring**: Performance-Hinweis (~10k Files, ~50k Nodes), vollständiges Workflow-Beispiel (18 Zeilen)
+  - **graph_stats**: `dict[str, int]` Return-Typ, Beispiel hinzugefügt
+  - **add_file**: Returns: None, Beispiel mit Node-Existenz-Check
+  - **add_node**: Node-ID-Format dokumentiert, separate Raises für beide Error-Fälle, Beispiel mit Edge-Check
+  - **add_dependency**: Idempotentes Verhalten dokumentiert, separate Raises, Beispiel mit relationship-Attribut
+  - **save**: OSError-Raise dokumentiert, Beispiel mit Verzeichniserstellung
+  - **load**: Returns: None, 3 Raises (FileNotFoundError, 2x ValueError), Beispiel mit Identitäts-Verifikation
+- 36/36 Tests bestanden, 100% Coverage, mypy/ruff clean

@@ -17,7 +17,9 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
 ]
-dependencies = []
+dependencies = [
+    "networkx>=3.0",
+]
 
 [project.optional-dependencies]
 # Install dev dependencies via: pip install -r requirements-dev.txt
