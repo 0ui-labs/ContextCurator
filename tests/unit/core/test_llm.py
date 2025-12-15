@@ -10,7 +10,7 @@ all LLM provider implementations. Tests cover:
 """
 
 import os
-from typing import Protocol, get_type_hints
+from typing import get_type_hints
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest

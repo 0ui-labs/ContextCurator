@@ -7,9 +7,9 @@ Ermöglicht Dependency Injection und einfaches Testen mit Mocks.
 import os
 from typing import Protocol
 
-from openai import AsyncOpenAI
 import openai
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from openai import AsyncOpenAI
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 
 class LLMProvider(Protocol):

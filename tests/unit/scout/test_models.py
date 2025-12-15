@@ -1,10 +1,11 @@
 """Unit tests for scout.models module."""
 
-import pytest
-from pathlib import Path
 from dataclasses import FrozenInstanceError
+from pathlib import Path
 
-from codemap.scout.models import TreeReport, FileEntry
+import pytest
+
+from codemap.scout.models import FileEntry, TreeReport
 
 
 class TestTreeReport:
