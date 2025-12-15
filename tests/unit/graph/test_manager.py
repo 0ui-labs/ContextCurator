@@ -394,6 +394,88 @@ class TestGraphManagerHierarchy:
         # Verify edge was created
         assert manager.graph.has_edge("src/main.py", "src/utils.py")
 
+    def test_add_external_module_creates_node(self) -> None:
+        """Test add_external_module creates node with correct attributes.
+
+        The method should create a node with:
+        - Node ID in format "external::{module_name}"
+        - Attribute type="external_module"
+        - Attribute name=module_name
+        """
+        manager = GraphManager()
+
+        node_id = manager.add_external_module("os")
+
+        # Node should exist with correct ID
+        assert "external::os" in manager.graph.nodes
+
+        # Node should have correct attributes
+        assert manager.graph.nodes["external::os"]["type"] == "external_module"
+        assert manager.graph.nodes["external::os"]["name"] == "os"
+
+    def test_add_external_module_returns_node_id(self) -> None:
+        """Test add_external_module returns the correct node ID.
+
+        The method should return the node ID in format "external::{module_name}".
+        """
+        manager = GraphManager()
+
+        node_id = manager.add_external_module("requests")
+
+        assert node_id == "external::requests"
+
+    def test_add_external_module_deduplicates(self) -> None:
+        """Test add_external_module deduplicates multiple calls.
+
+        Calling add_external_module multiple times with the same module_name
+        should not create duplicate nodes. The node should only be created once.
+        """
+        manager = GraphManager()
+
+        # Add same module twice
+        node_id1 = manager.add_external_module("json")
+        node_id2 = manager.add_external_module("json")
+
+        # Both should return the same node ID
+        assert node_id1 == node_id2
+        assert node_id1 == "external::json"
+
+        # Should only have one node in graph
+        assert manager.graph.number_of_nodes() == 1
+        assert "external::json" in manager.graph.nodes
+
+    def test_add_external_module_preserves_existing_attributes(self) -> None:
+        """Test add_external_module does not overwrite existing node attributes.
+
+        If a node already exists (e.g., created lazily via add_dependency),
+        add_external_module should not modify its existing attributes.
+        Only missing attributes should be added.
+        """
+        manager = GraphManager()
+
+        # Create a lazy node first via add_dependency
+        manager.add_file(FileEntry(Path("src/main.py"), 512, 128))
+        manager.add_dependency("src/main.py", "external::numpy")
+
+        # Add custom attribute to the lazy node
+        manager.graph.nodes["external::numpy"]["custom_attr"] = "custom_value"
+
+        # Call add_external_module on existing node
+        node_id = manager.add_external_module("numpy")
+
+        # Should return correct node ID
+        assert node_id == "external::numpy"
+
+        # Should have type and name attributes
+        assert manager.graph.nodes["external::numpy"]["type"] == "external_module"
+        assert manager.graph.nodes["external::numpy"]["name"] == "numpy"
+
+        # Should preserve custom attribute
+        assert manager.graph.nodes["external::numpy"]["custom_attr"] == "custom_value"
+
+        # Should still have the IMPORTS edge
+        assert manager.graph.has_edge("src/main.py", "external::numpy")
+
 
 class TestGraphManagerPersistence:
     """Test suite for GraphManager persistence (save/load) operations."""
