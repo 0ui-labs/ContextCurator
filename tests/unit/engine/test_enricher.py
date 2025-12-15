@@ -650,3 +650,173 @@ class TestEnrichNodesEdgeCases:
 
         # Assert - ghost.py::func not in graph (non-existent node_id skipped)
         assert "ghost.py::func" not in graph.nodes
+
+
+class TestEnrichNodesIntegration:
+    """Integration test suite for GraphEnricher end-to-end workflow."""
+
+    @pytest.mark.asyncio
+    async def test_enricher_end_to_end_workflow(self, tmp_path) -> None:
+        """Test complete enrichment workflow with realistic graph from MapBuilder.
+
+        This integration test validates the complete GraphEnricher workflow by:
+        1. Creating temporary Python files with real functions and classes
+        2. Building a realistic graph using MapBuilder
+        3. Configuring MockProvider to return deterministic JSON responses
+        4. Enriching all nodes with GraphEnricher
+        5. Verifying all function/class nodes have summary and risks attributes
+
+        This test ensures that GraphEnricher integrates correctly with:
+        - MapBuilder: Graph construction from real code
+        - GraphManager: Node attribute management
+        - MockProvider: Deterministic LLM responses
+
+        The test uses a custom MockProvider to return JSON matching actual node IDs
+        from the graph, simulating realistic LLM behavior.
+        """
+        # Arrange - Create temporary Python files with realistic code
+        from pathlib import Path
+
+        # Create module with functions and classes
+        utils_content = '''def calculate_sum(a, b):
+    """Calculate sum of two numbers."""
+    return a + b
+
+def process_data(data):
+    """Process input data."""
+    return [x * 2 for x in data]
+
+class DataProcessor:
+    """Process and transform data."""
+    def __init__(self):
+        self.data = []
+
+    def add_item(self, item):
+        """Add item to processor."""
+        self.data.append(item)
+'''
+
+        # Create main module with more functions
+        main_content = '''from utils import calculate_sum
+
+def main():
+    """Main entry point."""
+    result = calculate_sum(10, 20)
+    return result
+
+class Application:
+    """Main application class."""
+    def run(self):
+        """Run the application."""
+        pass
+'''
+
+        (tmp_path / "utils.py").write_text(utils_content)
+        (tmp_path / "main.py").write_text(main_content)
+
+        # Build graph with MapBuilder
+        from codemap.engine.builder import MapBuilder
+
+        builder = MapBuilder()
+        graph_manager = builder.build(tmp_path)
+
+        # Collect all function/class node IDs from the graph for MockProvider
+        code_node_ids = []
+        for node_id, attrs in graph_manager.graph.nodes(data=True):
+            if attrs.get("type") in ["function", "class"]:
+                code_node_ids.append(node_id)
+
+        # Verify we have code nodes (sanity check)
+        assert len(code_node_ids) >= 5, (
+            f"Expected at least 5 code nodes from files, got {len(code_node_ids)}"
+        )
+
+        # Create custom MockProvider that returns JSON matching the actual node IDs
+        from codemap.core.llm import MockProvider
+
+        class CustomMockProvider(MockProvider):
+            """Custom mock provider that returns deterministic JSON for enrichment."""
+
+            async def send(self, system: str, user: str) -> str:  # noqa: ARG002
+                """Return JSON array with summaries and risks for all nodes."""
+                # Build JSON response matching all code nodes in the graph
+                results = []
+                for node_id in code_node_ids:
+                    results.append({
+                        "node_id": node_id,
+                        "summary": f"Summary for {node_id}",
+                        "risks": [f"Risk A for {node_id}", "Risk B"],
+                    })
+
+                # Return as JSON string
+                import json
+
+                return json.dumps(results)
+
+        # Create enricher with graph and custom mock provider
+        mock_provider = CustomMockProvider()
+        enricher = GraphEnricher(graph_manager, mock_provider)
+
+        # Act - Enrich all nodes
+        await enricher.enrich_nodes(batch_size=10)
+
+        # Assert - Verify all function nodes have summary and risks
+        function_nodes = [
+            (node_id, attrs) for node_id, attrs in graph_manager.graph.nodes(data=True)
+            if attrs.get("type") == "function"
+        ]
+
+        assert len(function_nodes) >= 4, (
+            f"Expected at least 4 function nodes, got {len(function_nodes)}"
+        )
+
+        for node_id, attrs in function_nodes:
+            assert "summary" in attrs, f"Function {node_id} missing summary attribute"
+            assert attrs["summary"] == f"Summary for {node_id}", (
+                f"Function {node_id} has incorrect summary: {attrs['summary']}"
+            )
+            assert "risks" in attrs, f"Function {node_id} missing risks attribute"
+            assert isinstance(attrs["risks"], list), (
+                f"Function {node_id} risks should be a list"
+            )
+            assert len(attrs["risks"]) == 2, (
+                f"Function {node_id} should have 2 risks, got {len(attrs['risks'])}"
+            )
+
+        # Assert - Verify all class nodes have summary and risks
+        class_nodes = [
+            (node_id, attrs) for node_id, attrs in graph_manager.graph.nodes(data=True)
+            if attrs.get("type") == "class"
+        ]
+
+        assert len(class_nodes) >= 2, (
+            f"Expected at least 2 class nodes, got {len(class_nodes)}"
+        )
+
+        for node_id, attrs in class_nodes:
+            assert "summary" in attrs, f"Class {node_id} missing summary attribute"
+            assert attrs["summary"] == f"Summary for {node_id}", (
+                f"Class {node_id} has incorrect summary: {attrs['summary']}"
+            )
+            assert "risks" in attrs, f"Class {node_id} missing risks attribute"
+            assert isinstance(attrs["risks"], list), (
+                f"Class {node_id} risks should be a list"
+            )
+            assert len(attrs["risks"]) == 2, (
+                f"Class {node_id} should have 2 risks, got {len(attrs['risks'])}"
+            )
+
+        # Assert - Verify file nodes do NOT have summary attribute
+        file_nodes = [
+            (node_id, attrs) for node_id, attrs in graph_manager.graph.nodes(data=True)
+            if attrs.get("type") == "file"
+        ]
+
+        assert len(file_nodes) >= 2, (
+            f"Expected at least 2 file nodes, got {len(file_nodes)}"
+        )
+
+        for node_id, attrs in file_nodes:
+            assert "summary" not in attrs, (
+                f"File {node_id} should NOT have summary attribute (files are not enriched)"
+            )
