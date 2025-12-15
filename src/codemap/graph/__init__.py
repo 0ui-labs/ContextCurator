@@ -14,6 +14,18 @@ Edge Types:
     - IMPORTS: From file node to imported target. The target can be another file
       node (internal import) or an external_module node (stdlib/third-party import)
 
+Distinguishing Internal vs External Imports:
+    All IMPORTS edges use the same relationship="IMPORTS" attribute regardless of
+    whether the import is internal or external. There is no separate edge type or
+    attribute for external imports.
+
+    To determine if an import is external, check the target node's type attribute:
+        - type="file" -> internal project import
+        - type="external_module" -> external import (stdlib/third-party)
+
+    This design keeps the edge semantics simple (source imports target) while the
+    node type carries the semantic meaning of what kind of module is being imported.
+
 External modules are created lazily by add_dependency() when the target doesn't
 exist, allowing the caller to enrich them with type="external_module" afterward.
 """

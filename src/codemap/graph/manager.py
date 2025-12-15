@@ -197,6 +197,12 @@ class GraphManager:
         No type validation is performed on either node; only existence of the source
         node is verified.
 
+        Note:
+            All IMPORTS edges are identical regardless of whether the target is internal
+            or external. There is no separate edge attribute to distinguish import types.
+            To determine if an import is external, check the target node's type attribute
+            (type="external_module" indicates an external import).
+
         Args:
             source_file_id: The node ID of the importing file (must exist in graph).
             target_file_id: The node ID being imported (created lazily if missing).
