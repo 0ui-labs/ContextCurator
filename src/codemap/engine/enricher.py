@@ -10,6 +10,7 @@ import logging
 import re
 from typing import Any
 
+import openai
 import orjson
 
 from codemap.core.llm import LLMProvider
@@ -141,14 +142,20 @@ class GraphEnricher:
         3. Parsing the JSON response
         4. Updating graph attributes
 
-        Error handling is batch-level: exceptions are caught and logged but
-        not propagated, ensuring one batch failure doesn't affect others.
+        Error handling is batch-level for expected LLM errors:
+        - ValueError, openai.RateLimitError, openai.APIConnectionError, openai.APIError
+          are caught, logged as warnings, and isolated per batch.
+        - Unexpected exceptions are logged as errors and re-raised to surface
+          programming bugs during development/testing.
 
         Args:
             batch: List of tuples (node_id, attributes_dict) to process.
 
         Returns:
             None. Updates graph nodes in-place or logs warnings on failure.
+
+        Raises:
+            Exception: Re-raises unexpected exceptions after logging.
         """
         try:
             # Step 1: Build prompt
@@ -209,5 +216,17 @@ class GraphEnricher:
             except orjson.JSONDecodeError as e:
                 logger.warning(f"Failed to parse JSON response for batch: {e}")
 
+        except ValueError as e:
+            # Expected: LLM returns empty/null response
+            logger.warning(f"LLM returned invalid response for batch: {e}")
+        except (
+            openai.RateLimitError,
+            openai.APIConnectionError,
+            openai.APIError,
+        ) as e:
+            # Expected: LLM API errors (rate limiting, connection issues, etc.)
+            logger.warning(f"LLM API error processing batch: {e}")
         except Exception as e:
-            logger.warning(f"Error processing batch: {e}")
+            # Unexpected: Re-raise after logging to surface programming errors
+            logger.error(f"Unexpected error processing batch: {e}")
+            raise
