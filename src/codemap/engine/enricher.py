@@ -106,7 +106,13 @@ class GraphEnricher:
         Example:
             >>> enricher = GraphEnricher(graph_manager, llm_provider)
             >>> await enricher.enrich_nodes(batch_size=5)  # Process 5 nodes per batch
+
+        Raises:
+            ValueError: If batch_size is less than or equal to 0.
         """
+        if batch_size <= 0:
+            raise ValueError("batch_size must be positive")
+
         # Step 1: Collect unenriched nodes
         nodes = []
         for node_id, attrs in self._graph_manager.graph.nodes(data=True):

@@ -651,6 +651,34 @@ class TestEnrichNodesEdgeCases:
         # Assert - ghost.py::func not in graph (non-existent node_id skipped)
         assert "ghost.py::func" not in graph.nodes
 
+    @pytest.mark.asyncio
+    async def test_enricher_raises_on_invalid_batch_size(self) -> None:
+        """Test GraphEnricher raises ValueError for invalid batch_size.
+
+        Validates input validation:
+        - batch_size <= 0 raises ValueError
+        - Error message is clear and descriptive
+
+        This ensures the enricher fails fast with a clear error rather than
+        producing unexpected behavior (e.g., infinite loops, empty batches).
+        """
+        # Arrange
+        graph_manager = GraphManager()
+        llm_provider = AsyncMock()
+        enricher = GraphEnricher(graph_manager, llm_provider)
+
+        # Act & Assert - batch_size = 0
+        with pytest.raises(ValueError, match="batch_size must be positive"):
+            await enricher.enrich_nodes(batch_size=0)
+
+        # Act & Assert - batch_size = -1
+        with pytest.raises(ValueError, match="batch_size must be positive"):
+            await enricher.enrich_nodes(batch_size=-1)
+
+        # Act & Assert - batch_size = -100
+        with pytest.raises(ValueError, match="batch_size must be positive"):
+            await enricher.enrich_nodes(batch_size=-100)
+
 
 class TestEnrichNodesIntegration:
     """Integration test suite for GraphEnricher end-to-end workflow."""
