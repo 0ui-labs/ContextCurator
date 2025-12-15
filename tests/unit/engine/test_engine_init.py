@@ -19,8 +19,11 @@ def test_module_all_exports():
     # Verify MapBuilder is in __all__
     assert "MapBuilder" in engine.__all__
 
+    # Verify GraphEnricher is in __all__
+    assert "GraphEnricher" in engine.__all__
+
     # Verify only expected exports
-    assert engine.__all__ == ["MapBuilder"]
+    assert engine.__all__ == ["MapBuilder", "GraphEnricher"]
 
 
 def test_mapbuilder_is_correct_class():
@@ -30,3 +33,20 @@ def test_mapbuilder_is_correct_class():
 
     # Verify it's the same class
     assert MapBuilder is BuilderMapBuilder
+
+
+def test_graphenricher_import():
+    """Test that GraphEnricher is accessible from codemap.engine."""
+    from codemap.engine import GraphEnricher
+
+    # Verify GraphEnricher is importable
+    assert GraphEnricher is not None
+
+
+def test_graphenricher_is_correct_class():
+    """Test that imported GraphEnricher is the correct class from enricher module."""
+    from codemap.engine import GraphEnricher
+    from codemap.engine.enricher import GraphEnricher as EnricherGraphEnricher
+
+    # Verify it's the same class
+    assert GraphEnricher is EnricherGraphEnricher

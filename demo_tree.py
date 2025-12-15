@@ -2,6 +2,11 @@ import sys
 import time
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+# Load environment variables from .env if present
+load_dotenv()
+
 # Wir fügen 'src' zum Python-Pfad hinzu, damit er unser Modul findet
 sys.path.append(str(Path.cwd() / "src"))
 

@@ -13,6 +13,7 @@ pytest
 pytest-cov
 pytest-sugar
 pytest-asyncio
+python-dotenv
 ruff
 mypy
 types-networkx

@@ -3,6 +3,11 @@ import sys
 import time
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+# Load environment variables from .env if present
+load_dotenv()
+
 # Pfad-Setup für Imports
 sys.path.append(str(Path.cwd() / "src"))
 
