@@ -184,6 +184,7 @@ class GraphManager:
         """Add an IMPORTS edge between two file nodes.
 
         Creates a directed edge from source to target with relationship='IMPORTS'.
+        If the target node does not exist, it is created automatically with no attributes.
         If the edge already exists, it is updated (idempotent operation).
 
         Args:
@@ -195,21 +196,30 @@ class GraphManager:
 
         Raises:
             ValueError: If source_file_id does not exist in graph.
-            ValueError: If target_file_id does not exist in graph.
+
+        Lazy Node Creation:
+            If target_file_id does not exist in the graph, a minimal node is created
+            automatically with only the node ID. This allows adding dependencies to
+            external modules or forward references without pre-creating nodes. The
+            caller can later enrich the node with attributes (e.g., type, name) using
+            direct graph access or by calling add_file().
 
         Example:
             >>> manager = GraphManager()
             >>> manager.add_file(FileEntry(Path("src/main.py"), 512, 128))
-            >>> manager.add_file(FileEntry(Path("src/utils.py"), 256, 64))
-            >>> manager.add_dependency("src/main.py", "src/utils.py")
-            >>> manager.graph.edges["src/main.py", "src/utils.py"]["relationship"]
+            >>> # Target node doesn't exist yet - will be created lazily
+            >>> manager.add_dependency("src/main.py", "external::os")
+            >>> "external::os" in manager.graph.nodes
+            True
+            >>> manager.graph.edges["src/main.py", "external::os"]["relationship"]
             'IMPORTS'
         """
         if source_file_id not in self._graph.nodes:
             raise ValueError(f"Source node '{source_file_id}' not found in graph")
 
+        # Create target node lazily if it doesn't exist
         if target_file_id not in self._graph.nodes:
-            raise ValueError(f"Target node '{target_file_id}' not found in graph")
+            self._graph.add_node(target_file_id)
 
         self._graph.add_edge(source_file_id, target_file_id, relationship="IMPORTS")
 
