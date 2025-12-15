@@ -269,12 +269,130 @@ class TestGraphManagerHierarchy:
             manager.add_dependency("nonexistent.py", "src/utils.py")
 
     def test_add_dependency_without_target_node(self) -> None:
-        """Test add_dependency raises ValueError when target node doesn't exist."""
+        """Test add_dependency creates target node lazily when it doesn't exist.
+
+        When target_file_id does not exist in the graph, add_dependency should:
+        1. Create the target node automatically (lazy creation)
+        2. Create the IMPORTS edge from source to target
+        3. The lazy-created node should have no attributes except its ID
+
+        This allows adding dependencies to external modules without pre-creating nodes.
+        """
         manager = GraphManager()
         manager.add_file(FileEntry(Path("src/main.py"), 512, 128))
 
-        with pytest.raises(ValueError, match="Target node.*not found"):
-            manager.add_dependency("src/main.py", "nonexistent.py")
+        # Add dependency to non-existent target - should create it lazily
+        manager.add_dependency("src/main.py", "external::os")
+
+        # Assert target node was created
+        assert "external::os" in manager.graph.nodes
+
+        # Assert IMPORTS edge was created
+        assert manager.graph.has_edge("src/main.py", "external::os")
+        assert (
+            manager.graph.edges["src/main.py", "external::os"]["relationship"] == "IMPORTS"
+        )
+
+        # Assert lazy-created node has no attributes (except implicit ID)
+        # NetworkX nodes always have the node_id, but should have no other attributes
+        node_attrs = dict(manager.graph.nodes["external::os"])
+        assert len(node_attrs) == 0, f"Lazy node should have no attributes, got: {node_attrs}"
+
+    def test_add_dependency_source_validation_still_raises(self) -> None:
+        """Test add_dependency still raises ValueError when source node doesn't exist.
+
+        Source validation should remain strict - only target nodes are created lazily.
+        This ensures the importing file exists in the graph before creating dependencies.
+        """
+        manager = GraphManager()
+        manager.add_file(FileEntry(Path("src/utils.py"), 256, 64))
+
+        # Source validation should still raise ValueError
+        with pytest.raises(ValueError, match="Source node.*not found"):
+            manager.add_dependency("nonexistent.py", "src/utils.py")
+
+        # Target can be lazy-created, but source cannot
+        with pytest.raises(ValueError, match="Source node.*not found"):
+            manager.add_dependency("nonexistent.py", "also_nonexistent.py")
+
+    def test_lazy_node_can_be_enriched_later(self) -> None:
+        """Test lazy-created nodes can be enriched with attributes later.
+
+        After lazy creation, the node should be accessible via direct graph
+        access to add attributes like type, name, or other metadata.
+        """
+        manager = GraphManager()
+        manager.add_file(FileEntry(Path("src/main.py"), 512, 128))
+
+        # Create lazy node via add_dependency
+        manager.add_dependency("src/main.py", "external::requests")
+
+        # Verify it exists with no attributes
+        assert "external::requests" in manager.graph.nodes
+        assert len(dict(manager.graph.nodes["external::requests"])) == 0
+
+        # Enrich the node with attributes using direct graph access
+        manager.graph.nodes["external::requests"]["type"] = "external_module"
+        manager.graph.nodes["external::requests"]["name"] = "requests"
+        manager.graph.nodes["external::requests"]["source"] = "pip"
+
+        # Verify enrichment worked
+        assert manager.graph.nodes["external::requests"]["type"] == "external_module"
+        assert manager.graph.nodes["external::requests"]["name"] == "requests"
+        assert manager.graph.nodes["external::requests"]["source"] == "pip"
+
+    def test_multiple_lazy_nodes_for_same_target(self) -> None:
+        """Test multiple files can add dependencies to the same lazy-created target.
+
+        When multiple source files import the same external module, the target
+        node should only be created once, with all IMPORTS edges pointing to it.
+        """
+        manager = GraphManager()
+        manager.add_file(FileEntry(Path("src/main.py"), 512, 128))
+        manager.add_file(FileEntry(Path("src/utils.py"), 256, 64))
+        manager.add_file(FileEntry(Path("src/models.py"), 768, 192))
+
+        # All files import the same external module
+        manager.add_dependency("src/main.py", "external::json")
+        manager.add_dependency("src/utils.py", "external::json")
+        manager.add_dependency("src/models.py", "external::json")
+
+        # Should have 3 file nodes + 1 lazy external node = 4 nodes
+        assert manager.graph.number_of_nodes() == 4
+
+        # Should have 3 IMPORTS edges to the same target
+        assert manager.graph.number_of_edges() == 3
+        assert manager.graph.has_edge("src/main.py", "external::json")
+        assert manager.graph.has_edge("src/utils.py", "external::json")
+        assert manager.graph.has_edge("src/models.py", "external::json")
+
+        # Lazy node should still have no attributes
+        assert len(dict(manager.graph.nodes["external::json"])) == 0
+
+    def test_lazy_node_creation_with_existing_node(self) -> None:
+        """Test add_dependency doesn't overwrite existing target node.
+
+        If the target node already exists (e.g., a real file), lazy creation
+        should not modify its attributes. The edge should be created normally.
+        """
+        manager = GraphManager()
+        manager.add_file(FileEntry(Path("src/main.py"), 512, 128))
+        manager.add_file(FileEntry(Path("src/utils.py"), 256, 64))
+
+        # Verify target node has attributes before add_dependency
+        assert manager.graph.nodes["src/utils.py"]["type"] == "file"
+        assert manager.graph.nodes["src/utils.py"]["size"] == 256
+
+        # Add dependency - should not modify existing node
+        manager.add_dependency("src/main.py", "src/utils.py")
+
+        # Verify attributes are preserved
+        assert manager.graph.nodes["src/utils.py"]["type"] == "file"
+        assert manager.graph.nodes["src/utils.py"]["size"] == 256
+        assert manager.graph.nodes["src/utils.py"]["token_est"] == 64
+
+        # Verify edge was created
+        assert manager.graph.has_edge("src/main.py", "src/utils.py")
 
 
 class TestGraphManagerPersistence:
