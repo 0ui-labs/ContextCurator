@@ -85,7 +85,27 @@ class GraphManager:
 
     @property
     def graph(self) -> nx.DiGraph[str]:
-        """Return the underlying NetworkX directed graph (read-only access).
+        """Return the underlying NetworkX directed graph.
+
+        This property provides access to the raw NetworkX DiGraph for querying
+        and analysis. While direct modification is technically possible, prefer
+        using GraphManager methods for modifications:
+
+        Recommended API for modifications:
+            - add_file(): Add file nodes
+            - add_node(): Add code element nodes with CONTAINS edges
+            - add_dependency(): Add IMPORTS edges (with lazy target creation)
+            - add_external_module(): Add external module nodes
+
+        Direct graph access is appropriate for:
+            - Querying nodes and edges (iteration, filtering, analysis)
+            - Reading node/edge attributes
+            - Using NetworkX algorithms (shortest_path, centrality, etc.)
+
+        Note:
+            Direct modifications via graph.add_node() or graph.add_edge() bypass
+            GraphManager's validation and may create inconsistent graph states.
+            Use the GraphManager methods for proper encapsulation.
 
         Returns:
             The directed graph managed by this instance.

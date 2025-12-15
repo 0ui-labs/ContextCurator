@@ -236,12 +236,14 @@ class MapBuilder:
         External Module Handling:
             When an import cannot be resolved to a file in the project, it is
             treated as an external dependency (stdlib or third-party package).
-            A virtual node is created with:
+            Uses GraphManager.add_external_module() to create a virtual node with:
 
             - Node ID: "external::{module_name}" (e.g., "external::os")
             - Attribute type: "external_module"
             - Attribute name: module name string
 
+            The method handles deduplication automatically - multiple imports of
+            the same external module reuse the existing node.
             An IMPORTS edge is added from the source file to this external node.
         """
         # Normalize source_file to string for graph node ID (relative path)
@@ -277,15 +279,8 @@ class MapBuilder:
             return
 
         # Strategy 4 failed - treat as external module
-        external_node_id = f"external::{import_name}"
-
-        # Create external module node if it doesn't exist yet
-        if external_node_id not in self._graph.graph.nodes:
-            self._graph.graph.add_node(
-                external_node_id,
-                type="external_module",
-                name=import_name,
-            )
+        # Use GraphManager's dedicated method for proper encapsulation
+        external_node_id = self._graph.add_external_module(import_name)
 
         # Add IMPORTS edge from source file to external module
         self._graph.add_dependency(source_file_id, external_node_id)
