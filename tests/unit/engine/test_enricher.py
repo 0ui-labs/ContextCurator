@@ -556,6 +556,56 @@ class TestEnrichNodesEdgeCases:
         assert "risks" not in graph.nodes["test.py::func3"]
 
     @pytest.mark.asyncio
+    async def test_enricher_handles_markdown_wrapped_json(self) -> None:
+        """Test GraphEnricher extracts JSON from markdown code blocks.
+
+        Validates regex fallback parsing:
+        - Create 2 code nodes
+        - LLM returns JSON wrapped in markdown code block (```json ... ```)
+        - Verify regex extraction isolates JSON array
+        - Verify nodes updated correctly
+        """
+        # Arrange
+        graph_manager = GraphManager()
+
+        from pathlib import Path
+
+        graph_manager.add_file(FileEntry(Path("test.py"), size=512, token_est=128))
+        graph_manager.add_node(
+            "test.py",
+            CodeNode(type="function", name="func1", start_line=1, end_line=5),
+        )
+        graph_manager.add_node(
+            "test.py",
+            CodeNode(type="function", name="func2", start_line=7, end_line=12),
+        )
+
+        # Mock LLMProvider to return JSON wrapped in markdown code block
+        llm_provider = AsyncMock()
+        llm_response = '''Here is the analysis:
+
+```json
+[
+    {"node_id": "test.py::func1", "summary": "First function", "risks": ["Risk A"]},
+    {"node_id": "test.py::func2", "summary": "Second function", "risks": ["Risk B"]}
+]
+```
+
+I hope this helps!'''
+        llm_provider.send.return_value = llm_response
+
+        # Act
+        enricher = GraphEnricher(graph_manager, llm_provider)
+        await enricher.enrich_nodes(batch_size=10)
+
+        # Assert - Both nodes enriched via regex extraction
+        graph = graph_manager.graph
+        assert graph.nodes["test.py::func1"]["summary"] == "First function"
+        assert graph.nodes["test.py::func1"]["risks"] == ["Risk A"]
+        assert graph.nodes["test.py::func2"]["summary"] == "Second function"
+        assert graph.nodes["test.py::func2"]["risks"] == ["Risk B"]
+
+    @pytest.mark.asyncio
     async def test_enricher_custom_batch_size(self) -> None:
         """Test GraphEnricher with custom batch_size parameter.
 

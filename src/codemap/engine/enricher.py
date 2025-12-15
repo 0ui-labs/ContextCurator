@@ -142,6 +142,18 @@ class GraphEnricher:
         3. Parsing the JSON response
         4. Updating graph attributes
 
+        The LLM is expected to return a JSON array of objects, each containing:
+        - node_id: The identifier matching a node in the graph
+        - summary: A brief description of the code element
+        - risks: A list of potential risks or concerns
+
+        Example expected response::
+
+            [
+                {"node_id": "file.py::func", "summary": "Does X", "risks": ["Risk A"]},
+                {"node_id": "file.py::Class", "summary": "Does Y", "risks": []}
+            ]
+
         Error handling is batch-level for expected LLM errors:
         - ValueError, openai.RateLimitError, openai.APIConnectionError, openai.APIError
           are caught, logged as warnings, and isolated per batch.
@@ -184,15 +196,22 @@ class GraphEnricher:
             response = await self._llm_provider.send(system_prompt, user_prompt)
 
             # Step 3: Parse JSON response
+            # Strategy: Try direct parsing first for clean responses, then fall back
+            # to regex extraction for responses with markdown code blocks or extra text.
             try:
-                # Handle markdown code blocks (```json ... ```)
-                json_match = re.search(r"\[.*\]", response, re.DOTALL)
-                if json_match:
-                    json_str = json_match.group(0)
-                else:
-                    json_str = response
-
-                results = orjson.loads(json_str)
+                # First attempt: Direct parse (works for clean JSON responses)
+                try:
+                    results = orjson.loads(response)
+                except orjson.JSONDecodeError as direct_parse_error:
+                    # Fallback: Use regex to isolate JSON array from markdown code blocks
+                    # (e.g., ```json [...] ```) or responses with surrounding text.
+                    json_match = re.search(r"\[.*\]", response, re.DOTALL)
+                    if json_match:
+                        json_str = json_match.group(0)
+                        results = orjson.loads(json_str)
+                    else:
+                        # No JSON array found in response, re-raise original error
+                        raise direct_parse_error
 
                 # Step 4: Update graph attributes
                 for result in results:
