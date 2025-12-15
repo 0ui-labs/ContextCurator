@@ -1262,15 +1262,15 @@ def main():
         # Get file ID (relative path as used in graph)
         main_file_id = "main.py"
 
-        # Reset edges to test method in isolation
+        # Reset graph to test method in isolation with fresh state
+        # Remove both edges AND nodes to ensure _resolve_and_add_import() creates them
         external_modules = ["os", "pathlib", "pytest"]
         for module_name in external_modules:
             external_node_id = f"external::{module_name}"
             if graph_manager.graph.has_edge(main_file_id, external_node_id):
                 graph_manager.graph.remove_edge(main_file_id, external_node_id)
-
-        # Count edges before
-        edges_before = list(graph_manager.graph.edges(main_file_id))
+            if external_node_id in graph_manager.graph.nodes:
+                graph_manager.graph.remove_node(external_node_id)
 
         # Act - Should create external nodes and IMPORTS edges
         # Pass relative path as source_file
@@ -1306,9 +1306,14 @@ def main():
                 f"Expected external node name to be '{module_name}', got '{attrs['name']}'"
 
         # Assert - IMPORTS edges were created from main.py to external nodes
-        edges_after = list(graph_manager.graph.edges(main_file_id))
-        assert len(edges_after) == len(edges_before) + 3, \
-            f"Expected 3 new IMPORTS edges for external imports, got {len(edges_after) - len(edges_before)}"
+        # Filter edges to only count IMPORTS edges to exactly these three target nodes
+        imports_to_external = [
+            (u, v) for u, v in graph_manager.graph.edges(main_file_id)
+            if v in expected_external_nodes
+            and graph_manager.graph.edges[u, v].get("relationship") == "IMPORTS"
+        ]
+        assert len(imports_to_external) == 3, \
+            f"Expected 3 IMPORTS edges to external nodes, got {len(imports_to_external)}"
 
         for expected_node in expected_external_nodes:
             assert graph_manager.graph.has_edge(main_file_id, expected_node), \
@@ -1404,6 +1409,193 @@ def main():
             f"Expected IMPORTS edge from {main_file_id} to {expected_node_id}"
         edge_attrs = graph_manager.graph.edges[main_file_id, expected_node_id]
         assert edge_attrs["relationship"] == "IMPORTS"
+
+    def test_resolve_multiple_external_modules(self, tmp_path: Path) -> None:
+        """Test _resolve_and_add_import() with multiple external modules (networkx, openai).
+
+        Validates that MapBuilder correctly handles multiple external imports
+        in a single file, creating distinct external nodes for each module
+        and establishing separate IMPORTS edges.
+        """
+        # Arrange
+        main_content = '''import networkx
+import openai
+from typing import Dict
+
+def main():
+    pass
+'''
+        (tmp_path / "main.py").write_text(main_content)
+
+        builder = MapBuilder()
+        graph_manager = builder.build(tmp_path)
+
+        # Get the graph manager used by builder
+        builder._graph = graph_manager
+
+        main_file_id = "main.py"
+
+        # Reset graph to test method in isolation with fresh state
+        # Remove both edges AND nodes to ensure _resolve_and_add_import() creates them
+        external_modules = ["networkx", "openai", "typing"]
+        for module_name in external_modules:
+            external_node_id = f"external::{module_name}"
+            if graph_manager.graph.has_edge(main_file_id, external_node_id):
+                graph_manager.graph.remove_edge(main_file_id, external_node_id)
+            if external_node_id in graph_manager.graph.nodes:
+                graph_manager.graph.remove_node(external_node_id)
+
+        # Act - Call _resolve_and_add_import() for each module
+        builder._resolve_and_add_import(tmp_path, Path("main.py"), "networkx")
+        builder._resolve_and_add_import(tmp_path, Path("main.py"), "openai")
+        builder._resolve_and_add_import(tmp_path, Path("main.py"), "typing")
+
+        # Assert - External nodes were created for each module
+        for module_name in external_modules:
+            external_node_id = f"external::{module_name}"
+
+            # Node exists
+            assert external_node_id in graph_manager.graph.nodes, \
+                f"Expected external node '{external_node_id}' to be created"
+
+            # Node has correct type
+            attrs = graph_manager.graph.nodes[external_node_id]
+            assert attrs["type"] == "external_module", \
+                f"Expected type='external_module' for {external_node_id}, got '{attrs['type']}'"
+
+            # IMPORTS edge exists
+            assert graph_manager.graph.has_edge(main_file_id, external_node_id), \
+                f"Expected IMPORTS edge from {main_file_id} to {external_node_id}"
+
+            # Edge has correct relationship
+            edge_attrs = graph_manager.graph.edges[main_file_id, external_node_id]
+            assert edge_attrs["relationship"] == "IMPORTS", \
+                f"Expected IMPORTS relationship for edge to {external_node_id}"
+
+    def test_resolve_external_import_idempotent(self, tmp_path: Path) -> None:
+        """Test _resolve_and_add_import() with duplicate external imports.
+
+        Validates that calling _resolve_and_add_import() multiple times
+        with the same external module is idempotent: only one node and
+        one edge are created, with no errors or duplicates.
+        """
+        # Arrange
+        main_content = '''import os
+
+def main():
+    pass
+'''
+        (tmp_path / "main.py").write_text(main_content)
+
+        builder = MapBuilder()
+        graph_manager = builder.build(tmp_path)
+
+        # Get the graph manager used by builder
+        builder._graph = graph_manager
+
+        main_file_id = "main.py"
+        external_node_id = "external::os"
+
+        # Reset edges to test method in isolation
+        if graph_manager.graph.has_edge(main_file_id, external_node_id):
+            graph_manager.graph.remove_edge(main_file_id, external_node_id)
+        if external_node_id in graph_manager.graph.nodes:
+            graph_manager.graph.remove_node(external_node_id)
+
+        # Act - Call _resolve_and_add_import() for "os" THREE times
+        builder._resolve_and_add_import(tmp_path, Path("main.py"), "os")
+        builder._resolve_and_add_import(tmp_path, Path("main.py"), "os")
+        builder._resolve_and_add_import(tmp_path, Path("main.py"), "os")
+
+        # Assert - Only ONE external::os node exists
+        external_nodes = [
+            node_id for node_id, attrs in graph_manager.graph.nodes(data=True)
+            if node_id == external_node_id
+        ]
+        assert len(external_nodes) == 1, \
+            f"Expected exactly 1 external::os node after 3 calls, got {len(external_nodes)}"
+
+        # Assert - Only ONE IMPORTS edge from main.py to external::os
+        edges_to_external = [
+            (u, v) for u, v in graph_manager.graph.edges()
+            if u == main_file_id and v == external_node_id
+        ]
+        assert len(edges_to_external) == 1, \
+            f"Expected exactly 1 IMPORTS edge after 3 calls, got {len(edges_to_external)}"
+
+        # Assert - Node has correct type
+        attrs = graph_manager.graph.nodes[external_node_id]
+        assert attrs["type"] == "external_module", \
+            f"Expected type='external_module', got '{attrs['type']}'"
+
+    def test_resolve_mixed_internal_external_imports(self, tmp_path: Path) -> None:
+        """Test _resolve_and_add_import() with both internal and external imports.
+
+        Validates that MapBuilder correctly handles files with mixed imports:
+        internal modules resolve to file nodes, external modules create
+        external nodes, and both types of edges coexist in the graph.
+        """
+        # Arrange
+        utils_content = '''def helper():
+    pass
+'''
+        main_content = '''import os
+from utils import helper
+
+def main():
+    helper()
+'''
+        (tmp_path / "utils.py").write_text(utils_content)
+        (tmp_path / "main.py").write_text(main_content)
+
+        builder = MapBuilder()
+        graph_manager = builder.build(tmp_path)
+
+        # Get the graph manager used by builder
+        builder._graph = graph_manager
+
+        main_file_id = "main.py"
+        utils_file_id = "utils.py"
+        external_node_id = "external::os"
+
+        # Reset edges to test method in isolation
+        if graph_manager.graph.has_edge(main_file_id, utils_file_id):
+            graph_manager.graph.remove_edge(main_file_id, utils_file_id)
+        if graph_manager.graph.has_edge(main_file_id, external_node_id):
+            graph_manager.graph.remove_edge(main_file_id, external_node_id)
+
+        # Act - Resolve both external and internal imports
+        builder._resolve_and_add_import(tmp_path, Path("main.py"), "os")
+        builder._resolve_and_add_import(tmp_path, Path("main.py"), "utils")
+
+        # Assert - Internal edge: main.py → utils.py
+        assert graph_manager.graph.has_edge(main_file_id, utils_file_id), \
+            f"Expected IMPORTS edge from {main_file_id} to {utils_file_id} (internal)"
+        internal_edge_attrs = graph_manager.graph.edges[main_file_id, utils_file_id]
+        assert internal_edge_attrs["relationship"] == "IMPORTS", \
+            "Expected IMPORTS relationship for internal import"
+
+        # Assert - External node exists with correct type
+        assert external_node_id in graph_manager.graph.nodes, \
+            f"Expected external node '{external_node_id}' to be created"
+        external_attrs = graph_manager.graph.nodes[external_node_id]
+        assert external_attrs["type"] == "external_module", \
+            f"Expected type='external_module', got '{external_attrs['type']}'"
+
+        # Assert - External edge: main.py → external::os
+        assert graph_manager.graph.has_edge(main_file_id, external_node_id), \
+            f"Expected IMPORTS edge from {main_file_id} to {external_node_id} (external)"
+        external_edge_attrs = graph_manager.graph.edges[main_file_id, external_node_id]
+        assert external_edge_attrs["relationship"] == "IMPORTS", \
+            "Expected IMPORTS relationship for external import"
+
+        # Assert - Total IMPORTS edges from main.py is 2 (ignore CONTAINS edges to functions)
+        imports_edges_from_main = [
+            (u, v) for u, v in graph_manager.graph.edges(main_file_id)
+            if graph_manager.graph.edges[u, v].get("relationship") == "IMPORTS"
+        ]
+        assert len(imports_edges_from_main) == 2, \
+            f"Expected 2 IMPORTS edges from main.py (1 internal + 1 external), got {len(imports_edges_from_main)}"
 
     def test_resolve_dotted_package_import_from_root(self, tmp_path: Path) -> None:
         """Test _resolve_and_add_import() with dotted package import from root.
