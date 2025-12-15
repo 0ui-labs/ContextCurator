@@ -241,6 +241,62 @@ class GraphManager:
 
         self._graph.add_edge(source_file_id, target_file_id, relationship="IMPORTS")
 
+    def add_external_module(self, module_name: str) -> str:
+        """Add an external module node to the graph.
+
+        Creates a node with ID format 'external::{module_name}' and attributes
+        type='external_module' and name=module_name. If a node with the same ID
+        already exists, it is NOT modified (deduplication). This method provides
+        encapsulation for creating properly-typed external module nodes instead
+        of relying on lazy node creation via add_dependency().
+
+        Args:
+            module_name: The name of the external module (e.g., 'os', 'requests').
+
+        Returns:
+            The node ID in format 'external::{module_name}'.
+
+        Note:
+            This method is idempotent and deduplicates nodes by ID. If the node
+            already exists (e.g., created lazily via add_dependency()), its
+            attributes are preserved and not overwritten. Only missing attributes
+            are added.
+
+        Example:
+            >>> manager = GraphManager()
+            >>> node_id = manager.add_external_module("os")
+            >>> node_id
+            'external::os'
+            >>> manager.graph.nodes["external::os"]["type"]
+            'external_module'
+            >>> manager.graph.nodes["external::os"]["name"]
+            'os'
+            >>> # Calling again returns same ID and doesn't create duplicates
+            >>> node_id2 = manager.add_external_module("os")
+            >>> node_id2 == node_id
+            True
+            >>> manager.graph.number_of_nodes()
+            1
+        """
+        node_id = f"external::{module_name}"
+
+        # If node already exists, do NOT overwrite attributes
+        if node_id in self._graph.nodes:
+            # Only add missing attributes, preserve existing ones
+            if "type" not in self._graph.nodes[node_id]:
+                self._graph.nodes[node_id]["type"] = "external_module"
+            if "name" not in self._graph.nodes[node_id]:
+                self._graph.nodes[node_id]["name"] = module_name
+        else:
+            # Create new node with attributes
+            self._graph.add_node(
+                node_id,
+                type="external_module",
+                name=module_name,
+            )
+
+        return node_id
+
     def save(self, path: Path) -> None:
         """Save the graph to a JSON file using orjson.
 
