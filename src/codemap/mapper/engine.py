@@ -4,35 +4,43 @@ This module provides the main parsing functionality that uses tree-sitter
 to analyze source code and extract structural information.
 """
 
+from importlib.resources import files
 from pathlib import Path
 from typing import Iterator
 
 from tree_sitter import Node, Query, QueryCursor
 from tree_sitter_language_pack import get_language, get_parser
 
-from codemap.mapper.models import CodeNode
-from codemap.mapper.queries import PYTHON_ALL_QUERY
+from codemap.mapper.models import CodeNode, QueryLoadError
 
 # Extension to language ID mapping
-# To add a new language: add entry here AND in LANGUAGE_QUERIES below
+# To add a new language: add entry here AND create corresponding .scm file in languages/
 LANGUAGE_MAP: dict[str, str] = {
     ".py": "python",
 }
 
-# Language ID to query string mapping
-# This is the single source of truth for which languages have query patterns defined.
-# To add a new language: add entry here with the appropriate tree-sitter query string.
-LANGUAGE_QUERIES: dict[str, str] = {
-    "python": PYTHON_ALL_QUERY,
-}
 
 def get_supported_languages() -> set[str]:
-    """Return the set of language IDs that have query patterns defined.
+    """Return the set of language IDs that have .scm query files in the languages/ directory.
+
+    Discovers supported languages by scanning the languages/ directory
+    for .scm query files. Each .scm file's stem (filename without extension)
+    becomes a supported language ID.
 
     Returns:
-        Set of language identifier strings (e.g., {"python"}).
+        Set of language identifier strings (e.g., {"python", "javascript"}).
+        Empty set if languages/ directory is missing.
+
+    Example:
+        >>> languages = get_supported_languages()
+        >>> "python" in languages
+        True
     """
-    return set(LANGUAGE_QUERIES.keys())
+    try:
+        languages_dir = files("codemap.mapper.languages")
+        return {f.name[:-4] for f in languages_dir.iterdir() if f.name.endswith(".scm")}
+    except FileNotFoundError:
+        return set()
 
 
 class ParserEngine:
@@ -44,14 +52,14 @@ class ParserEngine:
     Extensibility:
         To add support for a new language:
         1. Add extension mapping in LANGUAGE_MAP (e.g., ".js": "javascript")
-        2. Add query string in LANGUAGE_QUERIES (e.g., "javascript": JS_QUERY)
-        No changes to ParserEngine methods are required.
+        2. Create .scm query file in languages/ directory (e.g., languages/javascript.scm)
+        ParserEngine will automatically discover new .scm files.
 
     Architecture:
         1. LANGUAGE_MAP: maps file extensions to language identifiers
-        2. LANGUAGE_QUERIES: maps language IDs to tree-sitter query strings
+        2. languages/ directory: contains .scm files with tree-sitter queries
         3. get_language_id(): resolves path to language using LANGUAGE_MAP
-        4. parse(): validates language against LANGUAGE_QUERIES, parses code
+        4. parse(): loads query from .scm file (raises ValueError if missing)
         5. parse_file(): combines get_language_id() and parse() for convenience
 
     Example:
@@ -74,6 +82,26 @@ class ParserEngine:
     def __init__(self) -> None:
         """Initialize ParserEngine."""
         self._query_cache: dict[str, Query] = {}
+
+    def _load_query_from_file(self, language: str) -> str:
+        """Load tree-sitter query from .scm file in languages/ directory.
+
+        Args:
+            language: Language identifier (e.g., "python").
+
+        Returns:
+            Query string content from the .scm file.
+
+        Raises:
+            QueryLoadError: If no .scm file exists for the given language,
+                or if the languages/ package is missing.
+        """
+        try:
+            languages_pkg = files("codemap.mapper.languages")
+            query_file = languages_pkg / f"{language}.scm"
+            return query_file.read_text(encoding="utf-8")
+        except (FileNotFoundError, ModuleNotFoundError):
+            raise QueryLoadError(language, f"Query file not found: languages/{language}.scm")
 
     @property
     def cached_languages(self) -> frozenset[str]:
@@ -130,21 +158,24 @@ class ParserEngine:
         and imports as CodeNode objects. Line numbers are 1-indexed.
 
         The language_id parameter accepts any language identifier that has
-        query patterns defined in LANGUAGE_QUERIES. Use get_language_id()
-        to obtain the correct identifier from a file path, or
-        get_supported_languages() to see available languages.
+        query patterns available. Use get_language_id() to obtain the correct
+        identifier from a file path, or get_supported_languages() to see
+        available languages.
 
         Args:
             code: Source code string to parse.
-            language_id: Language identifier. Must be present in LANGUAGE_QUERIES.
-                Use get_supported_languages() to see available options.
+            language_id: Language identifier. Must have a corresponding query
+                file at languages/{language_id}.scm. Use get_supported_languages()
+                to see available options.
 
         Returns:
             List of CodeNode objects sorted by start_line.
             Empty list if code is empty or contains no extractable elements.
 
         Raises:
-            ValueError: If language_id is not in LANGUAGE_QUERIES.
+            QueryLoadError: If the query file for language_id cannot be loaded
+                (e.g., file missing, languages/ package missing).
+                Contains language_id attribute for programmatic handling.
 
         Example:
             >>> engine = ParserEngine()
@@ -155,28 +186,18 @@ class ParserEngine:
         if not code:
             return []
 
-        # Validate language has query patterns defined (uses LANGUAGE_QUERIES as source of truth)
-        if language_id not in LANGUAGE_QUERIES:
-            supported = ", ".join(sorted(LANGUAGE_QUERIES.keys()))
-            raise ValueError(
-                f"No query patterns defined for language: {language_id}. "
-                f"Supported languages: {supported}."
-            )
-
-        # Get the query string for this language from LANGUAGE_QUERIES
-        query_string = LANGUAGE_QUERIES[language_id]
-
         # Initialize parser and language for the requested language_id
-        # Type ignore: language_id is validated above; tree-sitter-language-pack
-        # expects a Literal type but we use runtime validation for flexibility
+        # Type ignore: tree-sitter-language-pack expects a Literal type
+        # but we use runtime validation for flexibility
         parser = get_parser(language_id)  # type: ignore[arg-type]
         lang = get_language(language_id)  # type: ignore[arg-type]
 
-        # Check cache for compiled query to avoid recompilation
+        # Check cache for compiled query to avoid recompilation and file I/O
         if language_id in self._query_cache:
             query = self._query_cache[language_id]
         else:
-            # Create new query and cache it for future use
+            # Cache miss: load query string from .scm file and compile
+            query_string = self._load_query_from_file(language_id)
             query = Query(lang, query_string)
             self._query_cache[language_id] = query
 

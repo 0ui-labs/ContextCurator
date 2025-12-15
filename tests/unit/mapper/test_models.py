@@ -1,8 +1,8 @@
 """Unit tests for mapper.models module."""
 
-import pytest
-from pathlib import Path
 from dataclasses import FrozenInstanceError
+
+import pytest
 
 from codemap.mapper.models import CodeNode
 
@@ -12,12 +12,7 @@ class TestCodeNode:
 
     def test_codenode_creation(self):
         """Test CodeNode can be instantiated with all attributes."""
-        node = CodeNode(
-            type="function",
-            name="foo",
-            start_line=1,
-            end_line=3
-        )
+        node = CodeNode(type="function", name="foo", start_line=1, end_line=3)
         assert node.type == "function"
         assert node.name == "foo"
         assert node.start_line == 1

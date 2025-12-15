@@ -6,11 +6,10 @@ structural information (classes, functions) and dependencies (imports).
 
 from codemap.mapper.engine import (
     LANGUAGE_MAP,
-    LANGUAGE_QUERIES,
     ParserEngine,
     get_supported_languages,
 )
-from codemap.mapper.models import CodeNode
+from codemap.mapper.models import CodeNode, QueryLoadError
 from codemap.mapper.reader import ContentReader, ContentReadError
 
 __all__ = [
@@ -18,7 +17,7 @@ __all__ = [
     "ContentReader",
     "ContentReadError",
     "LANGUAGE_MAP",
-    "LANGUAGE_QUERIES",
     "ParserEngine",
+    "QueryLoadError",
     "get_supported_languages",
 ]

@@ -7,10 +7,10 @@ import pytest
 
 from codemap.mapper.engine import (
     LANGUAGE_MAP,
-    LANGUAGE_QUERIES,
     ParserEngine,
     get_supported_languages,
 )
+from codemap.mapper.models import QueryLoadError
 
 
 class TestLanguageConfiguration:
@@ -21,23 +21,93 @@ class TestLanguageConfiguration:
         assert ".py" in LANGUAGE_MAP
         assert LANGUAGE_MAP[".py"] == "python"
 
-    def test_language_queries_contains_python(self) -> None:
-        """Test LANGUAGE_QUERIES contains python query string."""
-        assert "python" in LANGUAGE_QUERIES
-        assert isinstance(LANGUAGE_QUERIES["python"], str)
-        assert len(LANGUAGE_QUERIES["python"]) > 0
+    def test_supported_languages_contains_python(self) -> None:
+        """Test get_supported_languages includes python from .scm file."""
+        supported = get_supported_languages()
+        assert "python" in supported
+        assert isinstance(supported, set)
 
     def test_get_supported_languages_returns_set(self) -> None:
-        """Test get_supported_languages returns a set of language IDs."""
+        """Test get_supported_languages returns a set of language IDs.
+
+        This test verifies only the contract of get_supported_languages():
+        - Returns a set type
+        - Contains at least one known language (python)
+
+        The implementation source (LANGUAGE_QUERIES dict vs. directory scan)
+        is intentionally not tested here to allow implementation flexibility.
+        """
         languages = get_supported_languages()
         assert isinstance(languages, set)
         assert "python" in languages
 
-    def test_language_map_values_in_language_queries(self) -> None:
-        """Test all languages in LANGUAGE_MAP have queries in LANGUAGE_QUERIES."""
+    def test_language_map_values_have_query_support(self) -> None:
+        """Test all languages in LANGUAGE_MAP have query support.
+
+        Verifies that every language mapped from file extensions has
+        corresponding query patterns available via get_supported_languages().
+        This decouples the test from internal implementation details
+        (LANGUAGE_QUERIES dict vs. .scm file loading).
+        """
+        supported = get_supported_languages()
         for lang_id in LANGUAGE_MAP.values():
-            assert lang_id in LANGUAGE_QUERIES, (
-                f"Language '{lang_id}' is in LANGUAGE_MAP but not in LANGUAGE_QUERIES"
+            assert lang_id in supported, (
+                f"Language '{lang_id}' is in LANGUAGE_MAP but not supported. "
+                f"Ensure a query file exists at languages/{lang_id}.scm"
+            )
+
+    def test_get_supported_languages_scans_directory(self) -> None:
+        """Test get_supported_languages scans languages/ directory for .scm files.
+
+        This test verifies that get_supported_languages() dynamically discovers
+        available languages by scanning the languages/ directory for .scm files,
+        rather than returning hardcoded values.
+        """
+        from unittest.mock import MagicMock
+
+        # Create mock Traversable objects representing files in languages/ package
+        mock_python_scm = MagicMock()
+        mock_python_scm.name = "python.scm"
+
+        mock_javascript_scm = MagicMock()
+        mock_javascript_scm.name = "javascript.scm"
+
+        mock_readme = MagicMock()
+        mock_readme.name = "README.md"
+
+        mock_init = MagicMock()
+        mock_init.name = "__init__.py"
+
+        # Mock importlib.resources.files to return our fake directory
+        mock_languages_dir = MagicMock()
+        mock_languages_dir.iterdir.return_value = [
+            mock_python_scm,
+            mock_javascript_scm,
+            mock_readme,
+            mock_init,
+        ]
+
+        with patch("codemap.mapper.engine.files", return_value=mock_languages_dir):
+            languages = get_supported_languages()
+
+            # Should return language IDs extracted from .scm filenames
+            # (excluding non-.scm files like README.md and __init__.py)
+            assert languages == {"python", "javascript"}, (
+                f"Expected {{'python', 'javascript'}} from directory scan, but got: {languages}"
+            )
+
+    def test_get_supported_languages_missing_directory_returns_empty_set(self) -> None:
+        """Test get_supported_languages returns empty set when languages/ directory is missing.
+
+        This tests the graceful degradation path when the languages package
+        doesn't exist (e.g., during incomplete installation).
+        """
+        # Mock files() to raise FileNotFoundError (simulating missing package)
+        with patch("codemap.mapper.engine.files", side_effect=FileNotFoundError):
+            languages = get_supported_languages()
+
+            assert languages == set(), (
+                f"Expected empty set when languages/ directory is missing, but got: {languages}"
             )
 
 
@@ -162,13 +232,19 @@ def second_function():
         assert nodes == []
         assert isinstance(nodes, list)
 
-    def test_unsupported_language_raises_error(self) -> None:
-        """Test parser raises ValueError for unsupported language."""
+    def test_unsupported_language_raises_query_load_error(self) -> None:
+        """Test parser raises QueryLoadError for unsupported language.
+
+        When a language_id is passed that has no corresponding .scm query file,
+        ParserEngine.parse() raises QueryLoadError with the language_id attribute.
+        """
         code = "def foo(): pass"
         engine = ParserEngine()
 
-        with pytest.raises(ValueError):
+        with pytest.raises(QueryLoadError) as exc_info:
             engine.parse(code, language_id="javascript")
+
+        assert exc_info.value.language_id == "javascript"
 
     def test_query_cache_reuses_compiled_query(self) -> None:
         """Test that ParserEngine reuses cached Query objects for same language.
@@ -199,6 +275,113 @@ def second_function():
 
             # Verify results are identical
             assert nodes1 == nodes2
+
+    def test_loads_query_from_disk(self) -> None:
+        """Test parser loads query from .scm file via importlib.resources.
+
+        This test verifies that ParserEngine.parse() loads query strings
+        from external .scm files using importlib.resources.files().
+        """
+        from unittest.mock import MagicMock
+
+        code = "def foo():\n    pass\n"
+        engine = ParserEngine()
+
+        # Create a mock query file that returns valid Python query
+        mock_query_file = MagicMock()
+        mock_query_file.read_text.return_value = """
+        (function_definition name: (identifier) @function.name)
+        """
+
+        # Mock the files() function to return our mock package
+        mock_languages_pkg = MagicMock()
+        mock_languages_pkg.__truediv__ = MagicMock(return_value=mock_query_file)
+
+        with patch("codemap.mapper.engine.files", return_value=mock_languages_pkg):
+            nodes = engine.parse(code, language_id="python")
+
+            # Verify files() was called with the languages package
+            # Verify read_text was called on the query file
+            mock_query_file.read_text.assert_called_once_with(encoding="utf-8")
+
+        # Verify parsing succeeds with mocked file content
+        assert len(nodes) == 1
+        assert nodes[0].type == "function"
+        assert nodes[0].name == "foo"
+
+    def test_query_file_not_found_raises_query_load_error(self) -> None:
+        """Test parser raises QueryLoadError when .scm file is missing.
+
+        This test verifies that when a language's .scm query file is missing,
+        ParserEngine.parse() raises QueryLoadError with a helpful message including
+        the expected file path and the language_id attribute for programmatic handling.
+        """
+        from unittest.mock import MagicMock
+
+        code = "def foo():\n    pass\n"
+        # Use fresh engine to ensure cache miss
+        engine = ParserEngine()
+
+        # Create mock query file that raises FileNotFoundError on read
+        mock_query_file = MagicMock()
+        mock_query_file.read_text.side_effect = FileNotFoundError("No such file")
+
+        # Mock the files() function to return our mock package
+        mock_languages_pkg = MagicMock()
+        mock_languages_pkg.__truediv__ = MagicMock(return_value=mock_query_file)
+
+        # Use "python" as language_id (valid tree-sitter language) but mock file load to fail
+        with patch("codemap.mapper.engine.files", return_value=mock_languages_pkg):
+            with pytest.raises(QueryLoadError) as exc_info:
+                engine.parse(code, language_id="python")
+
+            # Verify QueryLoadError has language_id attribute
+            assert exc_info.value.language_id == "python", (
+                f"Expected QueryLoadError.language_id to be 'python', "
+                f"but got: {exc_info.value.language_id}"
+            )
+
+            # Verify error message is helpful
+            error_message = str(exc_info.value)
+            assert "python" in error_message, (
+                f"Expected error message to contain language name, but got: {error_message}"
+            )
+            assert "languages/" in error_message and ".scm" in error_message, (
+                f"Expected error message to contain expected file path, but got: {error_message}"
+            )
+
+    def test_missing_languages_package_raises_query_load_error(self) -> None:
+        """Test parser raises QueryLoadError when languages/ package is missing.
+
+        This test verifies that when the entire languages/ package doesn't exist
+        (e.g., incomplete installation), ParserEngine.parse() raises QueryLoadError
+        with a helpful message and language_id attribute for programmatic handling.
+        """
+        code = "def foo():\n    pass\n"
+        engine = ParserEngine()
+
+        # Mock files() to raise ModuleNotFoundError (simulating missing package)
+        with patch(
+            "codemap.mapper.engine.files",
+            side_effect=ModuleNotFoundError("No module named 'codemap.mapper.languages'"),
+        ):
+            with pytest.raises(QueryLoadError) as exc_info:
+                engine.parse(code, language_id="python")
+
+            # Verify QueryLoadError has language_id attribute
+            assert exc_info.value.language_id == "python", (
+                f"Expected QueryLoadError.language_id to be 'python', "
+                f"but got: {exc_info.value.language_id}"
+            )
+
+            # Verify error message is helpful
+            error_message = str(exc_info.value)
+            assert "python" in error_message, (
+                f"Expected error message to contain language name, but got: {error_message}"
+            )
+            assert "languages/" in error_message and ".scm" in error_message, (
+                f"Expected error message to contain expected file path, but got: {error_message}"
+            )
 
 
 class TestParseFile:

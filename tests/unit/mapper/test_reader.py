@@ -1,9 +1,9 @@
 """Unit tests for mapper.reader module."""
 
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from pathlib import Path
 
 from codemap.mapper.reader import ContentReader, ContentReadError
 

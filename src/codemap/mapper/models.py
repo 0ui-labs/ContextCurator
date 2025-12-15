@@ -1,10 +1,35 @@
 """Data models for the code mapper module.
 
 This module contains immutable dataclasses representing code structure elements
-extracted from source code via tree-sitter parsing.
+extracted from source code via tree-sitter parsing, as well as custom exceptions.
 """
 
 from dataclasses import dataclass
+
+
+class QueryLoadError(Exception):
+    """Raised when a tree-sitter query file cannot be loaded.
+
+    This exception wraps lower-level errors (FileNotFoundError, IOError, etc.)
+    that occur when loading .scm query files from the languages/ directory.
+
+    Attributes:
+        language_id: The language identifier for which query loading failed.
+        message: Human-readable error description.
+
+    Example:
+        >>> raise QueryLoadError("python", "Query file not found: languages/python.scm")
+    """
+
+    def __init__(self, language_id: str, message: str) -> None:
+        """Initialize QueryLoadError.
+
+        Args:
+            language_id: The language identifier (e.g., "python", "javascript").
+            message: Descriptive error message.
+        """
+        self.language_id = language_id
+        super().__init__(f"Failed to load query for '{language_id}': {message}")
 
 
 @dataclass(frozen=True)
