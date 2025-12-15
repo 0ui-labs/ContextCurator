@@ -213,8 +213,8 @@ class MapBuilder:
                (e.g., "codemap.scout" -> "codemap/scout/__init__.py")
 
         If a matching file is found in the graph nodes, adds an IMPORTS dependency
-        edge from source_file to the resolved target file. Silently skips imports
-        that cannot be resolved (external modules or non-existent files).
+        edge from source_file to the resolved target file. For imports that cannot
+        be resolved to project files, creates virtual external module nodes.
 
         Args:
             root: Root directory of the project being analyzed (unused but kept
@@ -228,10 +228,21 @@ class MapBuilder:
             None. Adds IMPORTS edge to self._graph if resolved successfully.
 
         Limitations:
-            - Only resolves imports to files already in the graph
-            - External stdlib/third-party modules are silently skipped
+            - Resolves imports to files in the graph, or creates external module
+              nodes for unresolved imports
             - Does not infer __init__.py for all package structures
             - Relative imports (from . import X) not directly supported
+
+        External Module Handling:
+            When an import cannot be resolved to a file in the project, it is
+            treated as an external dependency (stdlib or third-party package).
+            A virtual node is created with:
+
+            - Node ID: "external::{module_name}" (e.g., "external::os")
+            - Attribute type: "external_module"
+            - Attribute name: module name string
+
+            An IMPORTS edge is added from the source file to this external node.
         """
         # Normalize source_file to string for graph node ID (relative path)
         source_file_id = str(source_file)
@@ -265,4 +276,16 @@ class MapBuilder:
             self._graph.add_dependency(source_file_id, package_root_id)
             return
 
-        # Import could not be resolved - silently skip (external module or unresolved)
+        # Strategy 4 failed - treat as external module
+        external_node_id = f"external::{import_name}"
+
+        # Create external module node if it doesn't exist yet
+        if external_node_id not in self._graph.graph.nodes:
+            self._graph.graph.add_node(
+                external_node_id,
+                type="external_module",
+                name=import_name,
+            )
+
+        # Add IMPORTS edge from source file to external module
+        self._graph.add_dependency(source_file_id, external_node_id)

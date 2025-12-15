@@ -9,12 +9,15 @@ Test Organization:
     - TestMapBuilderBuild: Unit tests for build() method including valid paths,
       invalid inputs (nonexistent, file-as-root), error handling (parsing,
       content read), empty directories, and non-Python file filtering.
+    - TestMapBuilderExternalImportsIntegration: Integration tests for external
+      imports handling including stdlib imports, third-party modules, deduplication,
+      and mixed internal/external import scenarios.
     - TestMapBuilderBoundaryCases: Scalability tests for large directory
       structures (50+ files), deep nesting (10 levels), circular imports,
       and files with many import statements.
     - TestResolveAndAddImport: Unit tests for import resolution logic covering
       simple modules, dotted names, relative imports, package imports,
-      unresolved imports, and external modules.
+      unresolved imports, and external modules (with virtual node creation).
     - TestMapBuilderFailureModeIntegration: Failure-mode tests for resilience
       to corrupt files, parser exceptions, permission errors, and mixed
       success/failure scenarios.
@@ -628,6 +631,141 @@ def main():
         assert "script.py" in python_code_node, "Expected code node to be from script.py"
 
 
+class TestMapBuilderExternalImportsIntegration:
+    """Integration tests for external imports handling in MapBuilder.
+
+    Tests verify end-to-end behavior when building projects with external imports.
+    """
+
+    def test_build_creates_external_nodes_for_stdlib_imports(self, tmp_path: Path) -> None:
+        """Test MapBuilder.build() creates external nodes for stdlib imports in the graph.
+
+        Integration test validating that the complete build workflow:
+        - Discovers external imports (os, sys, pathlib, etc.) during parsing
+        - Creates virtual external nodes for each unique external module
+        - Adds IMPORTS edges from files to external nodes
+        - No warnings or errors are logged for external imports
+        """
+        # Arrange
+        main_content = '''import os
+import sys
+from pathlib import Path
+
+def main():
+    print(os.getcwd())
+    return sys.version
+'''
+        utils_content = '''import os
+from typing import List
+
+def helper() -> List[str]:
+    return os.listdir('.')
+'''
+        (tmp_path / "main.py").write_text(main_content)
+        (tmp_path / "utils.py").write_text(utils_content)
+
+        builder = MapBuilder()
+
+        # Act
+        graph_manager = builder.build(tmp_path)
+
+        # Assert - External nodes were created
+        external_nodes = {
+            node_id: attrs for node_id, attrs in graph_manager.graph.nodes(data=True)
+            if attrs.get("type") == "external_module"
+        }
+
+        # Expected external modules (os is deduplicated)
+        expected_modules = ["os", "sys", "pathlib", "typing"]
+        for module_name in expected_modules:
+            expected_node_id = f"external::{module_name}"
+            assert expected_node_id in external_nodes, \
+                f"Expected external node '{expected_node_id}' to be created"
+
+            attrs = external_nodes[expected_node_id]
+            assert attrs["name"] == module_name, \
+                f"Expected name='{module_name}', got '{attrs['name']}'"
+
+        # Assert - IMPORTS edges exist
+        # main.py should import: os, sys, pathlib
+        assert graph_manager.graph.has_edge("main.py", "external::os")
+        assert graph_manager.graph.has_edge("main.py", "external::sys")
+        assert graph_manager.graph.has_edge("main.py", "external::pathlib")
+
+        # utils.py should import: os, typing
+        assert graph_manager.graph.has_edge("utils.py", "external::os")
+        assert graph_manager.graph.has_edge("utils.py", "external::typing")
+
+        # Assert - Only ONE external::os node (deduplication)
+        os_nodes = [nid for nid in external_nodes if nid == "external::os"]
+        assert len(os_nodes) == 1, "Expected exactly 1 external::os node (deduplication)"
+
+    def test_build_handles_mixed_internal_and_external_imports(self, tmp_path: Path) -> None:
+        """Test MapBuilder.build() correctly handles mix of internal and external imports.
+
+        Integration test validating that when a file has both internal (project)
+        and external (stdlib/third-party) imports, both are resolved correctly:
+        - Internal imports create IMPORTS edges to project files
+        - External imports create IMPORTS edges to virtual external nodes
+        - Graph statistics reflect both types of imports
+        """
+        # Arrange
+        utils_content = '''def helper():
+    return "help"
+'''
+        main_content = '''import os
+from utils import helper
+
+def main():
+    result = helper()
+    return os.path.join(result, "path")
+'''
+        (tmp_path / "utils.py").write_text(utils_content)
+        (tmp_path / "main.py").write_text(main_content)
+
+        builder = MapBuilder()
+
+        # Act
+        graph_manager = builder.build(tmp_path)
+
+        # Assert - File nodes exist
+        file_nodes = [
+            node_id for node_id, attrs in graph_manager.graph.nodes(data=True)
+            if attrs.get("type") == "file"
+        ]
+        assert "main.py" in file_nodes
+        assert "utils.py" in file_nodes
+
+        # Assert - External node exists
+        external_nodes = [
+            node_id for node_id, attrs in graph_manager.graph.nodes(data=True)
+            if attrs.get("type") == "external_module"
+        ]
+        assert "external::os" in external_nodes
+
+        # Assert - Both IMPORTS edges exist from main.py
+        # To internal file
+        assert graph_manager.graph.has_edge("main.py", "utils.py"), \
+            "Expected IMPORTS edge from main.py to utils.py (internal)"
+        # To external module
+        assert graph_manager.graph.has_edge("main.py", "external::os"), \
+            "Expected IMPORTS edge from main.py to external::os (external)"
+
+        # Verify edge types
+        internal_edge = graph_manager.graph.edges["main.py", "utils.py"]
+        assert internal_edge["relationship"] == "IMPORTS"
+
+        external_edge = graph_manager.graph.edges["main.py", "external::os"]
+        assert external_edge["relationship"] == "IMPORTS"
+
+        # Assert - Graph statistics include external nodes
+        stats = graph_manager.graph_stats
+        # At least: 2 file nodes + 1 external node + 2 code nodes = 5 nodes
+        assert stats["nodes"] >= 5, f"Expected at least 5 nodes, got {stats['nodes']}"
+        # At least: 2 CONTAINS edges + 2 IMPORTS edges = 4 edges
+        assert stats["edges"] >= 4, f"Expected at least 4 edges, got {stats['edges']}"
+
+
 class TestMapBuilderBoundaryCases:
     """Boundary case tests for MapBuilder scalability and complex scenarios.
 
@@ -1092,14 +1230,18 @@ def main():
         assert len(edges_after) == len(edges_before), \
             "Expected no new edges for unresolved import"
 
-    def test_resolve_external_import(self, tmp_path: Path) -> None:
-        """Test _resolve_and_add_import() with external stdlib/third-party imports.
+    def test_resolve_external_import_creates_virtual_node(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test _resolve_and_add_import() creates virtual external nodes for stdlib/third-party imports.
 
-        Validates that MapBuilder silently skips external imports (e.g., "os",
-        "pathlib", "pytest") that are not part of the scanned project:
+        Validates that MapBuilder creates virtual external module nodes for external
+        imports (e.g., "os", "pathlib", "pytest") that are not part of the scanned project:
         - No exception is raised
-        - No dependency edge is added
-        - External modules are ignored (not an error condition)
+        - A virtual node with ID 'external::{module_name}' is created
+        - The node has type='external_module' and name=module_name
+        - An IMPORTS edge is created from source file to external node
+        - No warnings or errors are logged
         """
         # Arrange
         main_content = '''import os
@@ -1120,19 +1262,148 @@ def main():
         # Get file ID (relative path as used in graph)
         main_file_id = "main.py"
 
+        # Reset edges to test method in isolation
+        external_modules = ["os", "pathlib", "pytest"]
+        for module_name in external_modules:
+            external_node_id = f"external::{module_name}"
+            if graph_manager.graph.has_edge(main_file_id, external_node_id):
+                graph_manager.graph.remove_edge(main_file_id, external_node_id)
+
         # Count edges before
         edges_before = list(graph_manager.graph.edges(main_file_id))
 
-        # Act - Should not raise exception for any external imports
+        # Act - Should create external nodes and IMPORTS edges
         # Pass relative path as source_file
-        builder._resolve_and_add_import(tmp_path, Path("main.py"), "os")
-        builder._resolve_and_add_import(tmp_path, Path("main.py"), "pathlib")
-        builder._resolve_and_add_import(tmp_path, Path("main.py"), "pytest")
+        import logging
+        with caplog.at_level(logging.WARNING):
+            builder._resolve_and_add_import(tmp_path, Path("main.py"), "os")
+            builder._resolve_and_add_import(tmp_path, Path("main.py"), "pathlib")
+            builder._resolve_and_add_import(tmp_path, Path("main.py"), "pytest")
 
-        # Assert - No new edges added for external imports
+        # Assert - No warnings logged for external modules
+        warning_messages = [
+            record.message for record in caplog.records
+            if record.levelname == "WARNING"
+        ]
+        assert len(warning_messages) == 0, \
+            f"Expected no warnings for external imports, got: {warning_messages}"
+
+        # Assert - External nodes were created
+        external_nodes = {
+            node_id: attrs for node_id, attrs in graph_manager.graph.nodes(data=True)
+            if attrs.get("type") == "external_module"
+        }
+
+        expected_external_nodes = ["external::os", "external::pathlib", "external::pytest"]
+        for expected_node in expected_external_nodes:
+            assert expected_node in external_nodes, \
+                f"Expected external node '{expected_node}' to be created"
+
+            # Verify node attributes
+            attrs = external_nodes[expected_node]
+            module_name = expected_node.replace("external::", "")
+            assert attrs["name"] == module_name, \
+                f"Expected external node name to be '{module_name}', got '{attrs['name']}'"
+
+        # Assert - IMPORTS edges were created from main.py to external nodes
         edges_after = list(graph_manager.graph.edges(main_file_id))
-        assert len(edges_after) == len(edges_before), \
-            "Expected no new edges for external imports"
+        assert len(edges_after) == len(edges_before) + 3, \
+            f"Expected 3 new IMPORTS edges for external imports, got {len(edges_after) - len(edges_before)}"
+
+        for expected_node in expected_external_nodes:
+            assert graph_manager.graph.has_edge(main_file_id, expected_node), \
+                f"Expected IMPORTS edge from {main_file_id} to {expected_node}"
+            edge_attrs = graph_manager.graph.edges[main_file_id, expected_node]
+            assert edge_attrs["relationship"] == "IMPORTS", \
+                f"Expected IMPORTS relationship, got {edge_attrs['relationship']}"
+
+    def test_resolve_external_import_deduplication(self, tmp_path: Path) -> None:
+        """Test that same external module imported from multiple files creates only ONE external node.
+
+        Validates that MapBuilder deduplicates external module nodes when the same
+        external module is imported from multiple files:
+        - Only one external node is created for each unique external module
+        - Each importing file has its own IMPORTS edge to the shared external node
+        """
+        # Arrange
+        main_content = '''import os
+def main():
+    pass
+'''
+        utils_content = '''import os
+def helper():
+    pass
+'''
+        (tmp_path / "main.py").write_text(main_content)
+        (tmp_path / "utils.py").write_text(utils_content)
+
+        builder = MapBuilder()
+        graph_manager = builder.build(tmp_path)
+
+        # Get the graph manager used by builder
+        builder._graph = graph_manager
+
+        # Act - Import 'os' from both files
+        builder._resolve_and_add_import(tmp_path, Path("main.py"), "os")
+        builder._resolve_and_add_import(tmp_path, Path("utils.py"), "os")
+
+        # Assert - Only ONE external::os node exists
+        external_nodes = [
+            node_id for node_id, attrs in graph_manager.graph.nodes(data=True)
+            if attrs.get("type") == "external_module" and node_id == "external::os"
+        ]
+        assert len(external_nodes) == 1, \
+            f"Expected exactly 1 external::os node, got {len(external_nodes)}"
+
+        # Assert - Both files have IMPORTS edges to the same external node
+        assert graph_manager.graph.has_edge("main.py", "external::os"), \
+            "Expected IMPORTS edge from main.py to external::os"
+        assert graph_manager.graph.has_edge("utils.py", "external::os"), \
+            "Expected IMPORTS edge from utils.py to external::os"
+
+    def test_resolve_external_dotted_import(self, tmp_path: Path) -> None:
+        """Test _resolve_and_add_import() with dotted external imports (e.g., os.path).
+
+        Validates that MapBuilder creates external nodes for dotted external imports:
+        - Creates node with ID 'external::os.path' (preserves dots)
+        - Node has type='external_module' and name='os.path'
+        - IMPORTS edge is created from source file to external node
+        """
+        # Arrange
+        main_content = '''from os.path import join
+def main():
+    pass
+'''
+        (tmp_path / "main.py").write_text(main_content)
+
+        builder = MapBuilder()
+        graph_manager = builder.build(tmp_path)
+
+        # Get the graph manager used by builder
+        builder._graph = graph_manager
+
+        main_file_id = "main.py"
+
+        # Act
+        builder._resolve_and_add_import(tmp_path, Path("main.py"), "os.path")
+
+        # Assert - External node created with dotted name
+        expected_node_id = "external::os.path"
+        assert expected_node_id in graph_manager.graph.nodes, \
+            f"Expected external node '{expected_node_id}' to be created"
+
+        # Verify node attributes
+        attrs = graph_manager.graph.nodes[expected_node_id]
+        assert attrs["type"] == "external_module", \
+            f"Expected type='external_module', got '{attrs['type']}'"
+        assert attrs["name"] == "os.path", \
+            f"Expected name='os.path', got '{attrs['name']}'"
+
+        # Assert - IMPORTS edge created
+        assert graph_manager.graph.has_edge(main_file_id, expected_node_id), \
+            f"Expected IMPORTS edge from {main_file_id} to {expected_node_id}"
+        edge_attrs = graph_manager.graph.edges[main_file_id, expected_node_id]
+        assert edge_attrs["relationship"] == "IMPORTS"
 
     def test_resolve_dotted_package_import_from_root(self, tmp_path: Path) -> None:
         """Test _resolve_and_add_import() with dotted package import from root.

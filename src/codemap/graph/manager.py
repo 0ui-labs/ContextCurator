@@ -181,15 +181,25 @@ class GraphManager:
         self._graph.add_edge(parent_file_id, code_node_id, relationship="CONTAINS")
 
     def add_dependency(self, source_file_id: str, target_file_id: str) -> None:
-        """Add an IMPORTS edge between two file nodes.
+        """Add an IMPORTS edge between two nodes.
 
         Creates a directed edge from source to target with relationship='IMPORTS'.
+        This method can create edges between any existing nodes, not just file nodes.
         If the target node does not exist, it is created automatically with no attributes.
         If the edge already exists, it is updated (idempotent operation).
 
+        The source node must exist and is typically a file node (type="file") representing
+        the file that contains the import statement. The target node can be:
+        - A file node (type="file") for internal project imports
+        - An external module node (type="external_module") for third-party/stdlib imports
+        - A lazily-created node with no type (will be enriched later by the caller)
+
+        No type validation is performed on either node; only existence of the source
+        node is verified.
+
         Args:
-            source_file_id: The file node ID that contains the import statement.
-            target_file_id: The file node ID being imported.
+            source_file_id: The node ID of the importing file (must exist in graph).
+            target_file_id: The node ID being imported (created lazily if missing).
 
         Returns:
             None
@@ -201,8 +211,8 @@ class GraphManager:
             If target_file_id does not exist in the graph, a minimal node is created
             automatically with only the node ID. This allows adding dependencies to
             external modules or forward references without pre-creating nodes. The
-            caller can later enrich the node with attributes (e.g., type, name) using
-            direct graph access or by calling add_file().
+            caller can later enrich the node with attributes (e.g., type="external_module",
+            name) using direct graph access or by calling add_file().
 
         Example:
             >>> manager = GraphManager()
@@ -213,6 +223,8 @@ class GraphManager:
             True
             >>> manager.graph.edges["src/main.py", "external::os"]["relationship"]
             'IMPORTS'
+            >>> # Enrich the lazy node with type attribute
+            >>> manager.graph.nodes["external::os"]["type"] = "external_module"
         """
         if source_file_id not in self._graph.nodes:
             raise ValueError(f"Source node '{source_file_id}' not found in graph")
