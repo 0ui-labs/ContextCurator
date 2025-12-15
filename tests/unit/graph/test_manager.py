@@ -261,12 +261,25 @@ class TestGraphManagerHierarchy:
         assert manager.graph.has_edge("src/main.py", "src/utils.py")
 
     def test_add_dependency_without_source_node(self) -> None:
-        """Test add_dependency raises ValueError when source node doesn't exist."""
+        """Test add_dependency raises ValueError when source node doesn't exist.
+
+        Source validation should remain strict - only target nodes are created lazily.
+        This ensures the importing file exists in the graph before creating dependencies.
+
+        Tests two scenarios:
+        1. Source missing, target exists -> ValueError
+        2. Source missing, target also missing -> ValueError (source checked first)
+        """
         manager = GraphManager()
         manager.add_file(FileEntry(Path("src/utils.py"), 256, 64))
 
+        # Scenario 1: Source missing, target exists
         with pytest.raises(ValueError, match="Source node.*not found"):
             manager.add_dependency("nonexistent.py", "src/utils.py")
+
+        # Scenario 2: Both source and target missing - source validation fails first
+        with pytest.raises(ValueError, match="Source node.*not found"):
+            manager.add_dependency("nonexistent.py", "also_nonexistent.py")
 
     def test_add_dependency_without_target_node(self) -> None:
         """Test add_dependency creates target node lazily when it doesn't exist.
@@ -298,22 +311,37 @@ class TestGraphManagerHierarchy:
         node_attrs = dict(manager.graph.nodes["external::os"])
         assert len(node_attrs) == 0, f"Lazy node should have no attributes, got: {node_attrs}"
 
-    def test_add_dependency_source_validation_still_raises(self) -> None:
-        """Test add_dependency still raises ValueError when source node doesn't exist.
+    def test_add_dependency_lazy_node_idempotent(self) -> None:
+        """Test add_dependency is idempotent for lazy-created target nodes.
 
-        Source validation should remain strict - only target nodes are created lazily.
-        This ensures the importing file exists in the graph before creating dependencies.
+        Calling add_dependency multiple times with the same source and target
+        (where target is lazy-created) should:
+        1. Create the target node only once
+        2. Create only one IMPORTS edge
+        3. Not add any attributes to the lazy-created node
         """
         manager = GraphManager()
-        manager.add_file(FileEntry(Path("src/utils.py"), 256, 64))
+        manager.add_file(FileEntry(Path("src/main.py"), 512, 128))
 
-        # Source validation should still raise ValueError
-        with pytest.raises(ValueError, match="Source node.*not found"):
-            manager.add_dependency("nonexistent.py", "src/utils.py")
+        # Call add_dependency twice with same source and lazy target
+        manager.add_dependency("src/main.py", "external::idempotent")
+        manager.add_dependency("src/main.py", "external::idempotent")
 
-        # Target can be lazy-created, but source cannot
-        with pytest.raises(ValueError, match="Source node.*not found"):
-            manager.add_dependency("nonexistent.py", "also_nonexistent.py")
+        # Should have exactly 2 nodes: source file + lazy target
+        assert manager.graph.number_of_nodes() == 2
+        assert "external::idempotent" in manager.graph.nodes
+
+        # Should have exactly 1 IMPORTS edge
+        assert manager.graph.number_of_edges() == 1
+        assert manager.graph.has_edge("src/main.py", "external::idempotent")
+        assert (
+            manager.graph.edges["src/main.py", "external::idempotent"]["relationship"]
+            == "IMPORTS"
+        )
+
+        # Lazy-created node should still have no attributes
+        node_attrs = dict(manager.graph.nodes["external::idempotent"])
+        assert len(node_attrs) == 0, f"Lazy node should have no attributes, got: {node_attrs}"
 
     def test_lazy_node_can_be_enriched_later(self) -> None:
         """Test lazy-created nodes can be enriched with attributes later.
