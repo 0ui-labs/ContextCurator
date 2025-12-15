@@ -511,3 +511,142 @@ class TestEnrichNodesEdgeCases:
             f"Expected 5 LLM calls for 25 nodes with batch_size=5, "
             f"got {llm_provider.send.call_count}"
         )
+
+    @pytest.mark.asyncio
+    async def test_enricher_handles_non_dict_results(self) -> None:
+        """Test that non-dict elements in JSON array are skipped.
+
+        Validates robust result handling:
+        - Create 2 code nodes
+        - LLM returns array with mix: [123, {...valid...}, "string", {...valid...}]
+        - Verify non-dict elements skipped silently
+        - Verify valid dict elements processed correctly
+        - Verify no exception raised
+        """
+        # Arrange - Create GraphManager with 2 code nodes
+        graph_manager = GraphManager()
+
+        from pathlib import Path
+
+        graph_manager.add_file(FileEntry(Path("test.py"), size=512, token_est=128))
+
+        graph_manager.add_node(
+            "test.py",
+            CodeNode(type="function", name="func1", start_line=1, end_line=5),
+        )
+        graph_manager.add_node(
+            "test.py",
+            CodeNode(type="function", name="func2", start_line=7, end_line=12),
+        )
+
+        # Mock LLMProvider to return JSON array with non-dict elements
+        llm_provider = AsyncMock()
+        llm_response = """[
+            123,
+            {"node_id": "test.py::func1", "summary": "Valid summary 1", "risks": ["Risk A"]},
+            "some string",
+            {"node_id": "test.py::func2", "summary": "Valid summary 2", "risks": ["Risk B"]}
+        ]"""
+        llm_provider.send.return_value = llm_response
+
+        # Act - Should not raise exception
+        enricher = GraphEnricher(graph_manager, llm_provider)
+        await enricher.enrich_nodes(batch_size=10)
+
+        # Assert - Valid dict elements processed correctly
+        graph = graph_manager.graph
+        assert graph.nodes["test.py::func1"]["summary"] == "Valid summary 1"
+        assert graph.nodes["test.py::func1"]["risks"] == ["Risk A"]
+        assert graph.nodes["test.py::func2"]["summary"] == "Valid summary 2"
+        assert graph.nodes["test.py::func2"]["risks"] == ["Risk B"]
+
+    @pytest.mark.asyncio
+    async def test_enricher_handles_missing_node_id_in_result(self) -> None:
+        """Test that results missing node_id field are skipped with warning.
+
+        Validates result validation:
+        - Create 2 code nodes
+        - LLM returns array where one result missing node_id field
+        - Verify result with node_id processed correctly
+        - Verify result without node_id skipped (logged warning)
+        - Verify no exception raised
+        """
+        # Arrange - Create GraphManager with 2 code nodes
+        graph_manager = GraphManager()
+
+        from pathlib import Path
+
+        graph_manager.add_file(FileEntry(Path("test.py"), size=512, token_est=128))
+
+        graph_manager.add_node(
+            "test.py",
+            CodeNode(type="function", name="func1", start_line=1, end_line=5),
+        )
+        graph_manager.add_node(
+            "test.py",
+            CodeNode(type="function", name="func2", start_line=7, end_line=12),
+        )
+
+        # Mock LLMProvider to return JSON with one result missing node_id
+        llm_provider = AsyncMock()
+        llm_response = """[
+            {"summary": "Missing node_id", "risks": ["Risk X"]},
+            {"node_id": "test.py::func1", "summary": "Valid summary", "risks": ["Risk A"]}
+        ]"""
+        llm_provider.send.return_value = llm_response
+
+        # Act - Should not raise exception
+        enricher = GraphEnricher(graph_manager, llm_provider)
+        await enricher.enrich_nodes(batch_size=10)
+
+        # Assert - Only func1 enriched (has valid node_id)
+        graph = graph_manager.graph
+        assert graph.nodes["test.py::func1"]["summary"] == "Valid summary"
+        assert graph.nodes["test.py::func1"]["risks"] == ["Risk A"]
+
+        # Assert - func2 remains unchanged (result had no node_id)
+        assert "summary" not in graph.nodes["test.py::func2"]
+        assert "risks" not in graph.nodes["test.py::func2"]
+
+    @pytest.mark.asyncio
+    async def test_enricher_handles_nonexistent_node_id(self) -> None:
+        """Test that node_ids not in graph are skipped with warning.
+
+        Validates graph lookup:
+        - Create 1 code node with ID "test.py::real_func"
+        - LLM returns array with results for "ghost.py::func" and "test.py::real_func"
+        - Verify only existing node enriched
+        - Verify non-existent node_id skipped (logged warning)
+        - Verify no exception raised
+        """
+        # Arrange - Create GraphManager with 1 code node
+        graph_manager = GraphManager()
+
+        from pathlib import Path
+
+        graph_manager.add_file(FileEntry(Path("test.py"), size=512, token_est=128))
+
+        graph_manager.add_node(
+            "test.py",
+            CodeNode(type="function", name="real_func", start_line=1, end_line=5),
+        )
+
+        # Mock LLMProvider to return JSON with non-existent node_id
+        llm_provider = AsyncMock()
+        llm_response = """[
+            {"node_id": "ghost.py::func", "summary": "Ghost summary", "risks": ["Ghost risk"]},
+            {"node_id": "test.py::real_func", "summary": "Real summary", "risks": ["Real risk"]}
+        ]"""
+        llm_provider.send.return_value = llm_response
+
+        # Act - Should not raise exception
+        enricher = GraphEnricher(graph_manager, llm_provider)
+        await enricher.enrich_nodes(batch_size=10)
+
+        # Assert - Only real_func enriched (exists in graph)
+        graph = graph_manager.graph
+        assert graph.nodes["test.py::real_func"]["summary"] == "Real summary"
+        assert graph.nodes["test.py::real_func"]["risks"] == ["Real risk"]
+
+        # Assert - ghost.py::func not in graph (non-existent node_id skipped)
+        assert "ghost.py::func" not in graph.nodes

@@ -8,6 +8,7 @@ for efficient API usage and provides robust error handling.
 import asyncio
 import logging
 import re
+from typing import Any
 
 import orjson
 
@@ -125,7 +126,7 @@ class GraphEnricher:
         tasks = [self._enrich_batch(batch) for batch in batches]
         await asyncio.gather(*tasks, return_exceptions=True)
 
-    async def _enrich_batch(self, batch: list[tuple[str, dict]]) -> None:
+    async def _enrich_batch(self, batch: list[tuple[str, dict[str, Any]]]) -> None:
         """Enrich a single batch of code nodes with LLM analysis.
 
         This private helper method processes one batch by:
@@ -152,13 +153,18 @@ class GraphEnricher:
 
             user_prompt_lines = ["Analyze these code elements:"]
             for idx, (node_id, attrs) in enumerate(batch, start=1):
+                start_line = attrs.get('start_line')
+                end_line = attrs.get('end_line')
                 user_prompt_lines.append(
                     f"{idx}. node_id: {node_id}, type: {attrs.get('type')}, "
-                    f"name: {attrs.get('name')}, lines: {attrs.get('start_line')}-{attrs.get('end_line')}"
+                    f"name: {attrs.get('name')}, lines: {start_line}-{end_line}"
                 )
 
             user_prompt_lines.append("")
-            user_prompt_lines.append('Return JSON array: [{"node_id": "...", "summary": "...", "risks": ["..."]}]')
+            user_prompt_lines.append(
+                'Return JSON array: '
+                '[{"node_id": "...", "summary": "...", "risks": ["..."]}]'
+            )
             user_prompt = "\n".join(user_prompt_lines)
 
             # Step 2: Call LLM
@@ -190,8 +196,9 @@ class GraphEnricher:
                         continue
 
                     # Update node attributes
-                    self._graph_manager.graph.nodes[result_node_id]["summary"] = result.get("summary", "")
-                    self._graph_manager.graph.nodes[result_node_id]["risks"] = result.get("risks", [])
+                    node = self._graph_manager.graph.nodes[result_node_id]
+                    node["summary"] = result.get("summary", "")
+                    node["risks"] = result.get("risks", [])
 
             except orjson.JSONDecodeError as e:
                 logger.warning(f"Failed to parse JSON response for batch: {e}")
