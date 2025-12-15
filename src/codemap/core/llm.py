@@ -7,7 +7,9 @@ Ermöglicht Dependency Injection und einfaches Testen mit Mocks.
 import os
 from typing import Protocol
 
-from openai import OpenAI
+from openai import AsyncOpenAI
+import openai
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 
 class LLMProvider(Protocol):
@@ -17,11 +19,13 @@ class LLMProvider(Protocol):
     Ermöglicht Dependency Injection und einfaches Testen mit Mocks.
 
     Methods:
-        send: Sendet System- und User-Prompts an LLM, gibt Antwort zurück.
+        send: Sendet asynchron System- und User-Prompts an LLM, gibt Antwort zurück.
     """
 
-    def send(self, system: str, user: str) -> str:
-        """Sendet Prompts an LLM und erhält Antwort.
+    async def send(self, system: str, user: str) -> str:
+        """Sendet Prompts asynchron an LLM und erhält Antwort.
+
+        Dies ist eine asynchrone Methode und muss mit await aufgerufen werden.
 
         Args:
             system: System-Prompt für Kontext und Verhaltenssteuerung.
@@ -40,6 +44,8 @@ class MockProvider:
     ohne echte LLM-Aufrufe. Gibt einen fest vordefinierten String im
     gitignore-Format zurück, unabhängig von den Eingabeparametern.
 
+    Die send()-Methode ist asynchron und muss mit await aufgerufen werden.
+
     Verwendungszweck:
         - Unit-Tests für Komponenten, die LLMProvider benötigen
         - Vermeidung von echten API-Aufrufen in Tests
@@ -49,8 +55,11 @@ class MockProvider:
         Immer derselbe vordefinierte String mit typischen gitignore-Mustern.
     """
 
-    def send(self, system: str, user: str) -> str:  # noqa: ARG002
-        """Gibt einen deterministischen String im gitignore-Format zurück.
+    async def send(self, system: str, user: str) -> str:  # noqa: ARG002
+        """Gibt asynchron einen deterministischen String im gitignore-Format zurück.
+
+        Dies ist eine asynchrone Methode und muss mit await aufgerufen werden,
+        auch wenn sie keine I/O-Operationen durchführt.
 
         Ignoriert die übergebenen Prompts und gibt immer denselben
         vordefinierten String zurück. Dieser simuliert typische
@@ -68,19 +77,25 @@ class MockProvider:
 
 
 class CerebrasProvider:
-    """Cerebras-API-Integration für LLM-Inferenz.
+    """Cerebras-API-Integration für asynchrone LLM-Inferenz.
 
     Diese Implementierung bindet die Cerebras-API über das OpenAI-kompatible
     Interface an. Sie verwendet den llama3.1-70b-Modell für schnelle und
     qualitativ hochwertige Inferenz.
 
     Die Klasse liest den API-Schlüssel aus der Umgebungsvariable
-    CEREBRAS_API_KEY und initialisiert einen OpenAI-Client mit der
+    CEREBRAS_API_KEY und initialisiert einen AsyncOpenAI-Client mit der
     Cerebras-API-Base-URL.
 
+    Die send()-Methode ist asynchron und muss mit await aufgerufen werden.
+
     Attributes:
-        client: OpenAI-Client konfiguriert für Cerebras-API.
+        client: AsyncOpenAI-Client konfiguriert für Cerebras-API.
         model: Name des verwendeten Modells (llama3.1-70b).
+
+    Resilienz:
+        Automatische Wiederholungsversuche bei temporären API-Fehlern
+        (Rate Limits, Verbindungsprobleme) mit exponentiellem Backoff.
 
     Raises:
         ValueError: Wenn CEREBRAS_API_KEY nicht gesetzt ist.
@@ -89,7 +104,7 @@ class CerebrasProvider:
     def __init__(self) -> None:
         """Initialisiert den CerebrasProvider mit API-Key aus Umgebungsvariable.
 
-        Liest CEREBRAS_API_KEY aus os.environ und erstellt einen OpenAI-Client
+        Liest CEREBRAS_API_KEY aus os.environ und erstellt einen AsyncOpenAI-Client
         mit der Cerebras-API-Base-URL. Setzt das Standard-Modell auf llama3.1-70b.
 
         Raises:
@@ -98,11 +113,19 @@ class CerebrasProvider:
         api_key = os.environ.get("CEREBRAS_API_KEY")
         if not api_key:
             raise ValueError("CEREBRAS_API_KEY environment variable not set")
-        self.client = OpenAI(api_key=api_key, base_url="https://api.cerebras.ai/v1")
+        self.client = AsyncOpenAI(api_key=api_key, base_url="https://api.cerebras.ai/v1")
         self.model = "llama-3.3-70b"
 
-    def send(self, system: str, user: str) -> str:  # pragma: no cover
-        """Sendet Prompts an Cerebras-API und erhält Antwort.
+    @retry(
+        retry=retry_if_exception_type((openai.RateLimitError, openai.APIConnectionError)),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        reraise=True,
+    )
+    async def send(self, system: str, user: str) -> str:  # pragma: no cover
+        """Sendet Prompts asynchron an Cerebras-API und erhält Antwort.
+
+        Dies ist eine asynchrone Methode und muss mit await aufgerufen werden.
 
         Erstellt einen Chat-Completion-Request mit System- und User-Prompts
         und gibt die generierte Antwort zurück. Verwendet temperature=0.2
@@ -115,18 +138,28 @@ class CerebrasProvider:
         Returns:
             String-Antwort vom LLM.
 
+        Retry-Verhalten:
+            Automatische Wiederholungsversuche bei temporären Fehlern:
+            - Maximal 3 Versuche (initial + 2 Retries)
+            - Exponentielles Backoff: 1s, 2s, 4s (max 10s)
+            - Retry bei: RateLimitError (429), APIConnectionError
+            - Kein Retry bei: ValueError (leere/null Antworten)
+
         Raises:
             ValueError: Wenn die Cerebras-API eine unerwartete oder leere
                 Antwort zurückgibt. Dies tritt auf bei:
                 - Leerer choices-Liste in der API-Antwort
                 - None-Wert im message.content-Feld
-            openai.APIError: Bei Netzwerk- oder API-Fehlern (von OpenAI-Client).
+            openai.RateLimitError: Nach Erschöpfung aller Retry-Versuche bei Rate-Limiting.
+            openai.APIConnectionError: Nach Erschöpfung aller Retry-Versuche bei Verbindungsfehlern.
+            openai.APIError: Bei Netzwerk- oder API-Fehlern (von AsyncOpenAI-Client).
 
         Note:
-            Call-Sites sollten ValueError abfangen und geeignete Fallback-
-            oder Logging-Logik implementieren.
+            Call-Sites sollten await verwenden und ValueError, RateLimitError sowie
+            APIConnectionError abfangen und geeignete Fallback- oder Logging-Logik
+            implementieren.
         """
-        response = self.client.chat.completions.create(
+        response = await self.client.chat.completions.create(
             model=self.model,
             messages=[
                 {"role": "system", "content": system},
@@ -177,20 +210,25 @@ def get_provider(name: str = "mock") -> LLMProvider:
 
     Examples:
         Standard-Verwendung mit MockProvider (ohne Parameter):
-            >>> provider = get_provider()
-            >>> result = provider.send("system prompt", "user prompt")
-            >>> print(result)
-            node_modules/
-            dist/
-            .venv/
+            >>> async def example():
+            ...     provider = get_provider()
+            ...     result = await provider.send("system prompt", "user prompt")
+            ...     print(result)
+            ...
+            >>> # Ausgabe: node_modules/
+            >>> #          dist/
+            >>> #          .venv/
 
         Explizite Auswahl des MockProviders:
-            >>> provider = get_provider("mock")
-            >>> result = provider.send("Analyze code", "What patterns?")
+            >>> async def example():
+            ...     provider = get_provider("mock")
+            ...     result = await provider.send("Analyze code", "What patterns?")
 
         Verwendung des CerebrasProviders:
-            >>> provider = get_provider("cerebras")
-            >>> # Benötigt CEREBRAS_API_KEY Umgebungsvariable
+            >>> async def example():
+            ...     provider = get_provider("cerebras")
+            ...     result = await provider.send("system", "user")
+            ...     # Benötigt CEREBRAS_API_KEY Umgebungsvariable
 
         Fehlerbehandlung bei unbekanntem Provider:
             >>> try:

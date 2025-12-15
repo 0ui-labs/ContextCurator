@@ -8,6 +8,8 @@ to identify non-source files/folders using LLM provider. Tests cover:
 - Prompt construction verification
 """
 
+import pytest
+
 from codemap.scout.models import TreeReport
 
 
@@ -27,9 +29,10 @@ class TestMockProvider:
         last_user_prompt: The last user prompt passed to send().
 
     Example:
-        >>> provider = TestMockProvider()
-        >>> result = provider.send("system prompt", "user prompt")
-        >>> print(result)
+        >>> async def example():
+        ...     provider = TestMockProvider()
+        ...     result = await provider.send("system prompt", "user prompt")
+        ...     print(result)
         node_modules/
         dist/
         .venv/
@@ -42,8 +45,10 @@ class TestMockProvider:
         self.last_system_prompt: str | None = None
         self.last_user_prompt: str | None = None
 
-    def send(self, system: str, user: str) -> str:
+    async def send(self, system: str, user: str) -> str:
         """Return a deterministic gitignore-format response.
+
+        Dies ist eine asynchrone Methode und muss mit await aufgerufen werden.
 
         Stores the prompts for later verification and returns a fixed
         set of typical gitignore patterns.
@@ -115,7 +120,7 @@ class TestStructureAdvisorInitialization:
         class CustomProvider:
             """Custom provider for testing."""
 
-            def send(self, system: str, user: str) -> str:
+            async def send(self, system: str, user: str) -> str:
                 return "test output"
 
         provider = CustomProvider()
@@ -142,13 +147,14 @@ class TestStructureAdvisorAnalyzeMethod:
         assert hasattr(advisor, "analyze")
         assert callable(getattr(advisor, "analyze"))
 
-    def test_analyze_with_clean_response(self) -> None:
+    @pytest.mark.asyncio
+    async def test_analyze_with_clean_response(self) -> None:
         """Test analyze with clean response (no markdown, no prefix)."""
         # Arrange
         from codemap.scout.advisor import StructureAdvisor
 
         class CleanProvider:
-            def send(self, system: str, user: str) -> str:
+            async def send(self, system: str, user: str) -> str:
                 return "node_modules/\ndist/\n.venv/"
 
         provider = CleanProvider()
@@ -161,7 +167,7 @@ class TestStructureAdvisorAnalyzeMethod:
         )
 
         # Act
-        result = advisor.analyze(report)
+        result = await advisor.analyze(report)
 
         # Assert
         assert isinstance(result, list)
@@ -170,13 +176,14 @@ class TestStructureAdvisorAnalyzeMethod:
         assert "dist/" in result
         assert ".venv/" in result
 
-    def test_analyze_strips_markdown_code_blocks_with_language(self) -> None:
+    @pytest.mark.asyncio
+    async def test_analyze_strips_markdown_code_blocks_with_language(self) -> None:
         """Test analyze strips markdown code blocks with language identifier."""
         # Arrange
         from codemap.scout.advisor import StructureAdvisor
 
         class MarkdownProvider:
-            def send(self, system: str, user: str) -> str:
+            async def send(self, system: str, user: str) -> str:
                 return "```gitignore\nnode_modules/\ndist/\n```"
 
         provider = MarkdownProvider()
@@ -189,7 +196,7 @@ class TestStructureAdvisorAnalyzeMethod:
         )
 
         # Act
-        result = advisor.analyze(report)
+        result = await advisor.analyze(report)
 
         # Assert
         assert isinstance(result, list)
@@ -200,13 +207,14 @@ class TestStructureAdvisorAnalyzeMethod:
         assert "```gitignore" not in result
         assert "```" not in result
 
-    def test_analyze_strips_markdown_code_blocks_without_language(self) -> None:
+    @pytest.mark.asyncio
+    async def test_analyze_strips_markdown_code_blocks_without_language(self) -> None:
         """Test analyze strips markdown code blocks without language identifier."""
         # Arrange
         from codemap.scout.advisor import StructureAdvisor
 
         class MarkdownProvider:
-            def send(self, system: str, user: str) -> str:
+            async def send(self, system: str, user: str) -> str:
                 return "```\nnode_modules/\n.venv/\n```"
 
         provider = MarkdownProvider()
@@ -219,7 +227,7 @@ class TestStructureAdvisorAnalyzeMethod:
         )
 
         # Act
-        result = advisor.analyze(report)
+        result = await advisor.analyze(report)
 
         # Assert
         assert isinstance(result, list)
@@ -227,13 +235,14 @@ class TestStructureAdvisorAnalyzeMethod:
         assert "node_modules/" in result
         assert ".venv/" in result
 
-    def test_analyze_filters_prefix_text(self) -> None:
+    @pytest.mark.asyncio
+    async def test_analyze_filters_prefix_text(self) -> None:
         """Test analyze filters out explanatory prefix text from LLM response."""
         # Arrange
         from codemap.scout.advisor import StructureAdvisor
 
         class PrefixProvider:
-            def send(self, system: str, user: str) -> str:
+            async def send(self, system: str, user: str) -> str:
                 return "Hier ist die Liste:\nnode_modules/\ndist/"
 
         provider = PrefixProvider()
@@ -246,7 +255,7 @@ class TestStructureAdvisorAnalyzeMethod:
         )
 
         # Act
-        result = advisor.analyze(report)
+        result = await advisor.analyze(report)
 
         # Assert
         assert isinstance(result, list)
@@ -256,13 +265,14 @@ class TestStructureAdvisorAnalyzeMethod:
         assert "dist/" in result
         assert len(result) == 2
 
-    def test_analyze_filters_empty_lines(self) -> None:
+    @pytest.mark.asyncio
+    async def test_analyze_filters_empty_lines(self) -> None:
         """Test analyze filters out empty lines."""
         # Arrange
         from codemap.scout.advisor import StructureAdvisor
 
         class EmptyLinesProvider:
-            def send(self, system: str, user: str) -> str:
+            async def send(self, system: str, user: str) -> str:
                 return "node_modules/\n\n\ndist/\n\n.venv/\n"
 
         provider = EmptyLinesProvider()
@@ -275,7 +285,7 @@ class TestStructureAdvisorAnalyzeMethod:
         )
 
         # Act
-        result = advisor.analyze(report)
+        result = await advisor.analyze(report)
 
         # Assert
         assert isinstance(result, list)
@@ -285,13 +295,14 @@ class TestStructureAdvisorAnalyzeMethod:
         assert "dist/" in result
         assert ".venv/" in result
 
-    def test_analyze_accepts_simple_filenames_without_pattern_chars(self) -> None:
+    @pytest.mark.asyncio
+    async def test_analyze_accepts_simple_filenames_without_pattern_chars(self) -> None:
         """Test analyze accepts simple filenames without slash/asterisk/dot prefix."""
         # Arrange
         from codemap.scout.advisor import StructureAdvisor
 
         class SimpleNameProvider:
-            def send(self, system: str, user: str) -> str:
+            async def send(self, system: str, user: str) -> str:
                 return "Makefile\nLICENSE\nDockerfile"
 
         provider = SimpleNameProvider()
@@ -304,7 +315,7 @@ class TestStructureAdvisorAnalyzeMethod:
         )
 
         # Act
-        result = advisor.analyze(report)
+        result = await advisor.analyze(report)
 
         # Assert
         assert isinstance(result, list)
@@ -313,13 +324,14 @@ class TestStructureAdvisorAnalyzeMethod:
         assert "LICENSE" in result
         assert "Dockerfile" in result
 
-    def test_analyze_empty_response_returns_empty_list(self) -> None:
+    @pytest.mark.asyncio
+    async def test_analyze_empty_response_returns_empty_list(self) -> None:
         """Test analyze returns empty list for empty response."""
         # Arrange
         from codemap.scout.advisor import StructureAdvisor
 
         class EmptyProvider:
-            def send(self, system: str, user: str) -> str:
+            async def send(self, system: str, user: str) -> str:
                 return ""
 
         provider = EmptyProvider()
@@ -332,19 +344,20 @@ class TestStructureAdvisorAnalyzeMethod:
         )
 
         # Act
-        result = advisor.analyze(report)
+        result = await advisor.analyze(report)
 
         # Assert
         assert isinstance(result, list)
         assert len(result) == 0
 
-    def test_analyze_whitespace_only_returns_empty_list(self) -> None:
+    @pytest.mark.asyncio
+    async def test_analyze_whitespace_only_returns_empty_list(self) -> None:
         """Test analyze returns empty list for whitespace-only response."""
         # Arrange
         from codemap.scout.advisor import StructureAdvisor
 
         class WhitespaceProvider:
-            def send(self, system: str, user: str) -> str:
+            async def send(self, system: str, user: str) -> str:
                 return "   \n\n   \n   "
 
         provider = WhitespaceProvider()
@@ -357,19 +370,20 @@ class TestStructureAdvisorAnalyzeMethod:
         )
 
         # Act
-        result = advisor.analyze(report)
+        result = await advisor.analyze(report)
 
         # Assert
         assert isinstance(result, list)
         assert len(result) == 0
 
-    def test_analyze_complex_response_with_markdown_and_prefix(self) -> None:
+    @pytest.mark.asyncio
+    async def test_analyze_complex_response_with_markdown_and_prefix(self) -> None:
         """Test analyze with complex response combining markdown and prefix."""
         # Arrange
         from codemap.scout.advisor import StructureAdvisor
 
         class ComplexProvider:
-            def send(self, system: str, user: str) -> str:
+            async def send(self, system: str, user: str) -> str:
                 return (
                     "Hier ist die Liste der zu ignorierenden Pfade:\n"
                     "```gitignore\n"
@@ -389,7 +403,7 @@ class TestStructureAdvisorAnalyzeMethod:
         )
 
         # Act
-        result = advisor.analyze(report)
+        result = await advisor.analyze(report)
 
         # Assert
         assert isinstance(result, list)
@@ -402,13 +416,14 @@ class TestStructureAdvisorAnalyzeMethod:
         assert "```" not in result
         assert len(result) == 3
 
-    def test_analyze_normalizes_bullet_list_with_dash(self) -> None:
+    @pytest.mark.asyncio
+    async def test_analyze_normalizes_bullet_list_with_dash(self) -> None:
         """Test analyze removes leading dash bullet points from patterns."""
         # Arrange
         from codemap.scout.advisor import StructureAdvisor
 
         class BulletDashProvider:
-            def send(self, system: str, user: str) -> str:
+            async def send(self, system: str, user: str) -> str:
                 return "- node_modules/\n- dist/\n- .venv/"
 
         provider = BulletDashProvider()
@@ -421,7 +436,7 @@ class TestStructureAdvisorAnalyzeMethod:
         )
 
         # Act
-        result = advisor.analyze(report)
+        result = await advisor.analyze(report)
 
         # Assert
         assert isinstance(result, list)
@@ -432,13 +447,14 @@ class TestStructureAdvisorAnalyzeMethod:
         # Ensure bullet points are removed
         assert "- node_modules/" not in result
 
-    def test_analyze_normalizes_bullet_list_with_asterisk(self) -> None:
+    @pytest.mark.asyncio
+    async def test_analyze_normalizes_bullet_list_with_asterisk(self) -> None:
         """Test analyze removes leading asterisk bullet points from patterns."""
         # Arrange
         from codemap.scout.advisor import StructureAdvisor
 
         class BulletAsteriskProvider:
-            def send(self, system: str, user: str) -> str:
+            async def send(self, system: str, user: str) -> str:
                 return "* node_modules/\n* dist/\n* .venv/"
 
         provider = BulletAsteriskProvider()
@@ -451,7 +467,7 @@ class TestStructureAdvisorAnalyzeMethod:
         )
 
         # Act
-        result = advisor.analyze(report)
+        result = await advisor.analyze(report)
 
         # Assert
         assert isinstance(result, list)
@@ -462,13 +478,14 @@ class TestStructureAdvisorAnalyzeMethod:
         # Ensure bullet points are removed
         assert "* node_modules/" not in result
 
-    def test_analyze_normalizes_numbered_list(self) -> None:
+    @pytest.mark.asyncio
+    async def test_analyze_normalizes_numbered_list(self) -> None:
         """Test analyze removes numbered list prefixes from patterns."""
         # Arrange
         from codemap.scout.advisor import StructureAdvisor
 
         class NumberedListProvider:
-            def send(self, system: str, user: str) -> str:
+            async def send(self, system: str, user: str) -> str:
                 return "1. node_modules/\n2. dist/\n3. .venv/\n10. __pycache__/"
 
         provider = NumberedListProvider()
@@ -481,7 +498,7 @@ class TestStructureAdvisorAnalyzeMethod:
         )
 
         # Act
-        result = advisor.analyze(report)
+        result = await advisor.analyze(report)
 
         # Assert
         assert isinstance(result, list)
@@ -494,13 +511,14 @@ class TestStructureAdvisorAnalyzeMethod:
         assert "1. node_modules/" not in result
         assert "10. __pycache__/" not in result
 
-    def test_analyze_filters_comment_lines(self) -> None:
+    @pytest.mark.asyncio
+    async def test_analyze_filters_comment_lines(self) -> None:
         """Test analyze filters out comment lines starting with #."""
         # Arrange
         from codemap.scout.advisor import StructureAdvisor
 
         class CommentProvider:
-            def send(self, system: str, user: str) -> str:
+            async def send(self, system: str, user: str) -> str:
                 return "# This is a comment\nnode_modules/\n# Another comment\ndist/"
 
         provider = CommentProvider()
@@ -513,7 +531,7 @@ class TestStructureAdvisorAnalyzeMethod:
         )
 
         # Act
-        result = advisor.analyze(report)
+        result = await advisor.analyze(report)
 
         # Assert
         assert isinstance(result, list)
@@ -524,13 +542,14 @@ class TestStructureAdvisorAnalyzeMethod:
         assert "# This is a comment" not in result
         assert "# Another comment" not in result
 
-    def test_analyze_mixed_formatting(self) -> None:
+    @pytest.mark.asyncio
+    async def test_analyze_mixed_formatting(self) -> None:
         """Test analyze handles mixed formatting styles correctly."""
         # Arrange
         from codemap.scout.advisor import StructureAdvisor
 
         class MixedFormattingProvider:
-            def send(self, system: str, user: str) -> str:
+            async def send(self, system: str, user: str) -> str:
                 return (
                     "Hier sind die Pfade:\n"
                     "- node_modules/\n"
@@ -550,7 +569,7 @@ class TestStructureAdvisorAnalyzeMethod:
         )
 
         # Act
-        result = advisor.analyze(report)
+        result = await advisor.analyze(report)
 
         # Assert
         assert isinstance(result, list)
@@ -563,13 +582,14 @@ class TestStructureAdvisorAnalyzeMethod:
         assert "Hier sind die Pfade:" not in result
         assert "# Comment" not in result
 
-    def test_analyze_filters_empty_bullet_points(self) -> None:
+    @pytest.mark.asyncio
+    async def test_analyze_filters_empty_bullet_points(self) -> None:
         """Test analyze filters out empty bullet points after normalization."""
         # Arrange
         from codemap.scout.advisor import StructureAdvisor
 
         class EmptyBulletProvider:
-            def send(self, system: str, user: str) -> str:
+            async def send(self, system: str, user: str) -> str:
                 return "- \n-\n* \n1. \nnode_modules/\ndist/"
 
         provider = EmptyBulletProvider()
@@ -582,7 +602,7 @@ class TestStructureAdvisorAnalyzeMethod:
         )
 
         # Act
-        result = advisor.analyze(report)
+        result = await advisor.analyze(report)
 
         # Assert
         assert isinstance(result, list)
@@ -592,7 +612,8 @@ class TestStructureAdvisorAnalyzeMethod:
         # Ensure empty bullets are filtered out
         assert "" not in result
 
-    def test_analyze_returns_empty_list_on_provider_value_error(self) -> None:
+    @pytest.mark.asyncio
+    async def test_analyze_returns_empty_list_on_provider_value_error(self) -> None:
         """Test that analyze returns empty list when provider raises ValueError.
 
         When the LLM provider raises a ValueError (e.g., empty API response,
@@ -605,7 +626,7 @@ class TestStructureAdvisorAnalyzeMethod:
         class ErrorProvider:
             """Provider that raises ValueError to simulate API failure."""
 
-            def send(self, system: str, user: str) -> str:
+            async def send(self, system: str, user: str) -> str:
                 raise ValueError("Empty response from Cerebras API")
 
         provider = ErrorProvider()
@@ -618,7 +639,7 @@ class TestStructureAdvisorAnalyzeMethod:
         )
 
         # Act
-        result = advisor.analyze(report)
+        result = await advisor.analyze(report)
 
         # Assert
         assert isinstance(result, list)
@@ -628,7 +649,8 @@ class TestStructureAdvisorAnalyzeMethod:
 class TestStructureAdvisorPromptConstruction:
     """Test suite for verifying prompt construction in analyze method."""
 
-    def test_analyze_uses_system_prompt(self) -> None:
+    @pytest.mark.asyncio
+    async def test_analyze_uses_system_prompt(self) -> None:
         """Test that analyze passes SYSTEM_PROMPT to provider.send()."""
         # Arrange
         from codemap.scout.advisor import SYSTEM_PROMPT, StructureAdvisor
@@ -636,7 +658,7 @@ class TestStructureAdvisorPromptConstruction:
         captured_system = None
 
         class CaptureProvider:
-            def send(self, system: str, user: str) -> str:
+            async def send(self, system: str, user: str) -> str:
                 nonlocal captured_system
                 captured_system = system
                 return "node_modules/"
@@ -651,12 +673,13 @@ class TestStructureAdvisorPromptConstruction:
         )
 
         # Act
-        advisor.analyze(report)
+        await advisor.analyze(report)
 
         # Assert
         assert captured_system == SYSTEM_PROMPT
 
-    def test_analyze_user_prompt_includes_tree_string(self) -> None:
+    @pytest.mark.asyncio
+    async def test_analyze_user_prompt_includes_tree_string(self) -> None:
         """Test that analyze includes report.tree_string in user prompt."""
         # Arrange
         from codemap.scout.advisor import StructureAdvisor
@@ -664,7 +687,7 @@ class TestStructureAdvisorPromptConstruction:
         captured_user = None
 
         class CaptureProvider:
-            def send(self, system: str, user: str) -> str:
+            async def send(self, system: str, user: str) -> str:
                 nonlocal captured_user
                 captured_user = user
                 return "node_modules/"
@@ -680,13 +703,14 @@ class TestStructureAdvisorPromptConstruction:
         )
 
         # Act
-        advisor.analyze(report)
+        await advisor.analyze(report)
 
         # Assert
         assert captured_user is not None
         assert tree_string in captured_user
 
-    def test_analyze_user_prompt_format(self) -> None:
+    @pytest.mark.asyncio
+    async def test_analyze_user_prompt_format(self) -> None:
         """Test that analyze formats user prompt correctly."""
         # Arrange
         from codemap.scout.advisor import StructureAdvisor
@@ -694,7 +718,7 @@ class TestStructureAdvisorPromptConstruction:
         captured_user = None
 
         class CaptureProvider:
-            def send(self, system: str, user: str) -> str:
+            async def send(self, system: str, user: str) -> str:
                 nonlocal captured_user
                 captured_user = user
                 return "node_modules/"
@@ -710,7 +734,7 @@ class TestStructureAdvisorPromptConstruction:
         )
 
         # Act
-        advisor.analyze(report)
+        await advisor.analyze(report)
 
         # Assert
         assert captured_user is not None

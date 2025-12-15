@@ -1173,3 +1173,114 @@
    - Leere-Listen-Checks mit verständlichen Meldungen
 - Demo-Performance: ~0.02s für `src/` (67 Knoten) statt ~0.4s für Root (515 Knoten)
 - 28/28 Tests bestanden, alle Quality Gates erfüllt
+
+## Phase 12: Async LLM-Provider mit Retry-Mechanismus
+
+### #099 - 2025-12-15 12:30
+**Aktion:** pytest-asyncio und tenacity Dependencies hinzugefügt
+**Warum:** Plan 01 Phase 12 erfordert async Test-Support und Retry-Mechanismen für LLM-Provider
+**Ergebnis:**
+- `requirements-dev.txt` ERWEITERT:
+  - `tenacity` zu Core Dependencies hinzugefügt (Zeile 9)
+  - `pytest-asyncio` zu TDD/QA Tools hinzugefügt (Zeile 15)
+- Installation verifiziert: `tenacity` importiert, `pytest-asyncio 1.2.0`
+- Pytest erkennt asyncio Plugin (Mode.STRICT)
+- 281/281 Tests bestanden, keine Regressionen
+
+### #100 - 2025-12-15 13:45
+**Aktion:** LLMProvider Protocol und alle Provider auf async umgestellt (TDD RED→GREEN)
+**Warum:** Plan 02 Phase 12 erfordert async/await für alle LLM-Provider-Methoden
+**Ergebnis:**
+- `src/codemap/core/llm.py` REFACTORED:
+  - Import `OpenAI` → `AsyncOpenAI` von openai
+  - `LLMProvider.send()` → `async def send()` Protocol-Methode
+  - `MockProvider.send()` → `async def send()` mit async Docstring
+  - `CerebrasProvider.send()` → `async def send()` mit `await self.client.chat.completions.create()`
+  - `get_provider()` Docstring-Examples auf async-Kontext aktualisiert
+- `src/codemap/scout/advisor.py` REFACTORED:
+  - `StructureAdvisor.analyze()` → `async def analyze()` mit `await self._provider.send()`
+  - Docstring-Examples auf async-Kontext aktualisiert
+- `tests/unit/core/test_llm.py` REFACTORED:
+  - Import `AsyncMock` hinzugefügt
+  - Alle `send()`-Tests → `@pytest.mark.asyncio` + `async def` + `await`
+  - Alle `@patch("codemap.core.llm.OpenAI")` → `@patch("codemap.core.llm.AsyncOpenAI")`
+  - `MagicMock(return_value=mock_response)` → `AsyncMock(return_value=mock_response)` für API-Calls
+- `tests/unit/scout/test_advisor.py` REFACTORED:
+  - `TestMockProvider.send()` → `async def send()`
+  - Alle inline Provider-Klassen → `async def send()`
+  - Alle `analyze()`-Tests → `@pytest.mark.asyncio` + `async def` + `await`
+- 83/83 Tests bestanden, 100% Coverage für llm.py und advisor.py, mypy/ruff clean
+
+### #101 - 2025-12-15 14:30
+**Aktion:** tenacity Retry-Decorator für CerebrasProvider implementiert (TDD RED→GREEN)
+**Warum:** Plan 03 Phase 12 erfordert automatische Wiederholungsversuche bei transienten API-Fehlern
+**Ergebnis:**
+- `src/codemap/core/llm.py` ERWEITERT:
+  - Imports: `import openai` und `from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type`
+  - `@retry` Decorator auf `CerebrasProvider.send()`:
+    - `retry=retry_if_exception_type((openai.RateLimitError, openai.APIConnectionError))`
+    - `stop=stop_after_attempt(3)` (initial + 2 Retries)
+    - `wait=wait_exponential(multiplier=1, min=1, max=10)` (1s, 2s, 4s Backoff)
+    - `reraise=True` für korrekte Exception-Propagierung
+  - Docstrings aktualisiert: "Retry-Verhalten" Section, erweiterte Raises, async Note
+  - Klassen-Docstring: "Resilienz" Section für Retry-Mechanismus
+- `tests/unit/core/test_llm.py` ERWEITERT:
+  - `TestCerebrasProviderRetry` Klasse NEU mit 4 Tests:
+    - `test_retry_on_rate_limit_error`: 1x Fail → Success, 2 Calls
+    - `test_retry_on_api_connection_error`: 1x Fail → Success, 2 Calls
+    - `test_max_retries_exhausted_raises`: 3x Fail → Exception, 3 Calls
+    - `test_no_retry_on_value_error`: ValueError wird NICHT retried (1 Call)
+  - AsyncMock mit `side_effect` für Retry-Sequenzen
+- Code-Review: APPROVED - Keine Critical/Important Issues
+- 52/52 llm Tests, 87/87 Gesamttests bestanden, 100% Coverage für llm.py
+
+### #102 - 2025-12-15 16:15
+**Aktion:** Demo-Skripte auf async API-Contract angepasst
+**Warum:** Plan 04 Phase 12 - `StructureAdvisor.analyze()` ist jetzt async, Demo-Skripte riefen synchron auf
+**Ergebnis:**
+- `demo_advisor.py` REFACTORED:
+  - Import `asyncio` hinzugefügt
+  - `advisor.analyze(report)` → `asyncio.run(advisor.analyze(report))`
+  - Timing, Error-Handling, Result-Printing unverändert (erwartet `list[str]`)
+- `demo_full_scan.py` REFACTORED:
+  - Import `asyncio` hinzugefügt
+  - `async def run_analysis()` Wrapper hinzugefügt
+  - `advisor.analyze(report)` → `asyncio.run(run_analysis(report, advisor))`
+- Verifikation: Keine weiteren sync Call-Sites für `.analyze()` im Projekt
+- 35/35 advisor Tests bestanden, Syntax beider Demo-Skripte OK
+
+### #103 - 2025-12-15 17:00
+**Aktion:** pytest-asyncio Konfiguration in pyproject.toml ergänzt
+**Warum:** Plan 05 Phase 12 erforderte `asyncio_mode = "auto"` für automatische async Test-Erkennung
+**Ergebnis:**
+- `pyproject.toml` ERWEITERT:
+  - `asyncio_mode = "auto"` unter `[tool.pytest.ini_options]` hinzugefügt
+- Prüfung ergab: Tests und Implementation bereits vollständig async-konvertiert
+  - Alle 17 async Tests hatten bereits `@pytest.mark.asyncio` Marker
+  - Alle `send()` Calls nutzten bereits `await`
+  - `AsyncMock` und `AsyncOpenAI` bereits korrekt im Einsatz
+- 52/52 llm Tests bestanden, `asyncio: mode=Mode.AUTO` aktiv
+- Hinweis: Phase 12 Step 05 war de facto bereits in #100-#101 abgeschlossen
+
+### #104 - 2025-12-15 17:30
+**Aktion:** Async-Testkonvention dokumentiert (Phase 12 Step 06)
+**Warum:** Plan Step 06 Sektion 7 definiert explizit "Keep Introspection Tests Synchronous"
+**Ergebnis:**
+- **Entscheidung:** Nur Tests mit tatsächlichen async Operations werden mit `@pytest.mark.asyncio` markiert
+- **Begründung:** 
+  - Plan-Sektion 7 ("Keep Introspection Tests Synchronous") ist bewusst so designed
+  - Introspection-Tests (Docstring-Checks, Type-Hints, Existenz-Prüfungen) rufen keine async Methoden auf
+  - Async-Marker für sync-only Tests wären unnötiger Overhead ohne funktionalen Nutzen
+- **Betroffene Test-Klassen (bleiben synchron):**
+  - `TestStructureAdvisorInitialization` (5 Tests) - prüft nur `__init__`, keine `analyze()` Calls
+  - `TestStructureAdvisorSystemPromptConstant` (4 Tests) - prüft nur SYSTEM_PROMPT Konstante
+  - `TestStructureAdvisorDocumentation` (4 Tests) - prüft nur Docstrings
+  - `TestStructureAdvisorTypeHints` (2 Tests) - prüft nur Type-Annotations
+  - `test_analyze_method_exists` (1 Test) - prüft nur Methodenexistenz via `hasattr()`
+- **Async-markierte Test-Klassen:**
+  - `TestStructureAdvisorAnalyzeMethod` (16 von 17 Tests) - ruft `await advisor.analyze()`
+  - `TestStructureAdvisorPromptConstruction` (3 Tests) - ruft `await advisor.analyze()`
+- **Konvention für zukünftige Tests:**
+  - `@pytest.mark.asyncio` + `async def` nur bei Tests die `await` verwenden
+  - Introspection/statische Tests bleiben synchron (`def`)
+- 35/35 advisor Tests bestanden, Konvention befolgt Plan exakt

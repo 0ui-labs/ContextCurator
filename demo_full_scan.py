@@ -1,3 +1,4 @@
+import asyncio
 import sys
 import time
 from pathlib import Path
@@ -11,6 +12,12 @@ try:
 except ImportError as e:
     print(f"❌ Import Fehler: {e}")
     sys.exit(1)
+
+
+async def run_analysis(report, advisor):
+    """Async wrapper for advisor.analyze() to enable await usage."""
+    return await advisor.analyze(report)
+
 
 def format_size(size_bytes):
     """Hilfsfunktion für lesbare Dateigrößen."""
@@ -57,8 +64,8 @@ def main():
             
         advisor = StructureAdvisor(provider)
         t1 = time.time()
-        patterns = advisor.analyze(report)
-        
+        patterns = asyncio.run(run_analysis(report, advisor))
+
     except Exception as e:
         print(f"💥 Fehler bei der KI-Analyse: {e}")
         sys.exit(1)

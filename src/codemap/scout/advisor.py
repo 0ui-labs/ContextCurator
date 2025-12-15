@@ -35,19 +35,22 @@ class StructureAdvisor:
         _provider: The LLM provider implementation used for analysis.
 
     Example:
+        >>> import asyncio
         >>> from codemap.core.llm import MockProvider
         >>> from codemap.scout.models import TreeReport
-        >>> provider = MockProvider()
-        >>> advisor = StructureAdvisor(provider)
-        >>> report = TreeReport(
-        ...     tree_string="project/\\n├── src/\\n└── node_modules/",
-        ...     total_files=0,
-        ...     total_folders=2,
-        ...     estimated_tokens=15
-        ... )
-        >>> patterns = advisor.analyze(report)
-        >>> print(patterns)
-        ['node_modules/', 'dist/', '.venv/']
+        >>> async def example():
+        ...     provider = MockProvider()
+        ...     advisor = StructureAdvisor(provider)
+        ...     report = TreeReport(
+        ...         tree_string="project/\\n├── src/\\n└── node_modules/",
+        ...         total_files=0,
+        ...         total_folders=2,
+        ...         estimated_tokens=15
+        ...     )
+        ...     patterns = await advisor.analyze(report)
+        ...     return patterns
+        >>> # patterns = asyncio.run(example())
+        >>> # ['node_modules/', 'dist/', '.venv/']
     """
 
     def __init__(self, provider: LLMProvider) -> None:
@@ -59,8 +62,10 @@ class StructureAdvisor:
         """
         self._provider = provider
 
-    def analyze(self, report: TreeReport) -> list[str]:
+    async def analyze(self, report: TreeReport) -> list[str]:
         """Analyze TreeReport and return list of valid gitignore patterns only.
+
+        Dies ist eine asynchrone Methode und muss mit await aufgerufen werden.
 
         Sends the tree structure to the LLM provider with system prompt requesting
         identification of non-source files/folders. Parses the LLM response by:
@@ -89,23 +94,23 @@ class StructureAdvisor:
             No exceptions are raised; API errors result in empty list return.
 
         Example:
-            >>> advisor = StructureAdvisor(MockProvider())
-            >>> report = TreeReport(
-            ...     tree_string="project/\\n├── node_modules/",
-            ...     total_files=0,
-            ...     total_folders=1,
-            ...     estimated_tokens=10
-            ... )
-            >>> patterns = advisor.analyze(report)
-            >>> 'node_modules/' in patterns
-            True
+            >>> async def example():
+            ...     advisor = StructureAdvisor(MockProvider())
+            ...     report = TreeReport(
+            ...         tree_string="project/\\n├── node_modules/",
+            ...         total_files=0,
+            ...         total_folders=1,
+            ...         estimated_tokens=10
+            ...     )
+            ...     patterns = await advisor.analyze(report)
+            ...     return 'node_modules/' in patterns
         """
         # Construct user prompt with tree structure
         user_prompt = f"Hier ist der Dateibaum:\n\n{report.tree_string}"
 
         # Call LLM provider with error handling for API failures
         try:
-            response = self._provider.send(SYSTEM_PROMPT, user_prompt)
+            response = await self._provider.send(SYSTEM_PROMPT, user_prompt)
         except ValueError as e:
             logger.warning("LLM provider returned invalid response: %s", e)
             return []

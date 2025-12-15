@@ -1,3 +1,4 @@
+import asyncio
 import sys
 import time
 from pathlib import Path
@@ -57,7 +58,7 @@ def main():
     analysis_start = time.time()
 
     try:
-        patterns = advisor.analyze(report)
+        patterns = asyncio.run(advisor.analyze(report))
     except Exception as e:
         print(f"💥 Fehler bei der Analyse: {e}")
         sys.exit(1)
