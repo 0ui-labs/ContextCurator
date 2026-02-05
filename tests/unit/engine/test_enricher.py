@@ -979,3 +979,365 @@ class Application:
             assert "summary" not in attrs, (
                 f"File {node_id} should NOT have summary attribute (files are not enriched)"
             )
+
+
+class TestEnricherCodeContent:
+    """Tests for code content extraction and inclusion in enricher prompts.
+
+    These tests validate Phase 17: Code-Content Integration in GraphEnricher.
+    The enricher should extract real source code from files and include it
+    in LLM prompts for more accurate semantic analysis.
+
+    Tests follow TDD RED phase — they define expected behavior for features
+    that don't exist yet (new constructor parameters, _extract_code_snippet method,
+    enhanced prompt format).
+    """
+
+    @pytest.mark.asyncio
+    async def test_enricher_extracts_code_snippet(self, tmp_path) -> None:
+        """Code between start_line and end_line is extracted from the source file.
+
+        Given a file with known content and a function node spanning lines 2-4,
+        the enricher should extract exactly those lines. This is the core
+        capability that enables code-aware semantic analysis.
+        """
+        from pathlib import Path
+
+        from codemap.mapper.reader import ContentReader
+
+        # Arrange - Create a file with known content
+        source_file = tmp_path / "example.py"
+        source_file.write_text(
+            "# Line 1: Comment\n"
+            "def hello():  # Line 2\n"
+            '    return "world"  # Line 3\n'
+            "# Line 4: End comment\n"
+            "def other():  # Line 5\n"
+            "    pass\n"
+        )
+
+        # Create graph with a function node spanning lines 2-4
+        graph_manager = GraphManager()
+        graph_manager.add_file(FileEntry(Path("example.py"), size=100, token_est=25))
+        graph_manager.add_node(
+            "example.py",
+            CodeNode(type="function", name="hello", start_line=2, end_line=4),
+        )
+
+        # Mock LLM to capture the prompt it receives
+        llm_provider = AsyncMock()
+        llm_provider.send.return_value = (
+            '[{"node_id": "example.py::hello", "summary": "Says hello", "risks": []}]'
+        )
+
+        # Act - Create enricher with root_path and content_reader
+        enricher = GraphEnricher(
+            graph_manager,
+            llm_provider,
+            root_path=tmp_path,
+            content_reader=ContentReader(),
+        )
+        await enricher.enrich_nodes(batch_size=10)
+
+        # Assert - The prompt sent to LLM contains actual code
+        llm_provider.send.assert_called_once()
+        _system_prompt, user_prompt = llm_provider.send.call_args[0]
+        assert "def hello():" in user_prompt, (
+            "Prompt should contain the function definition"
+        )
+        assert 'return "world"' in user_prompt, (
+            "Prompt should contain the function body"
+        )
+        assert "def other():" not in user_prompt, (
+            "Prompt should NOT contain code outside the node's line range"
+        )
+
+    @pytest.mark.asyncio
+    async def test_enricher_sends_code_in_prompt(self, tmp_path) -> None:
+        """Enricher prompt includes code content with structured format labels.
+
+        When root_path is configured, the prompt should contain a 'code:' label
+        followed by the actual function body in a code block, enabling the LLM
+        to analyze real code instead of guessing from metadata alone.
+        """
+        from pathlib import Path
+
+        from codemap.mapper.reader import ContentReader
+
+        # Arrange - Create a source file with a function
+        source_file = tmp_path / "module.py"
+        source_file.write_text(
+            "def process_data(items):\n"
+            "    result = []\n"
+            "    for item in items:\n"
+            "        result.append(item * 2)\n"
+            "    return result\n"
+        )
+
+        graph_manager = GraphManager()
+        graph_manager.add_file(FileEntry(Path("module.py"), size=200, token_est=50))
+        graph_manager.add_node(
+            "module.py",
+            CodeNode(type="function", name="process_data", start_line=1, end_line=5),
+        )
+
+        llm_provider = AsyncMock()
+        llm_provider.send.return_value = (
+            '[{"node_id": "module.py::process_data", "summary": "Processes data", "risks": []}]'
+        )
+
+        # Act
+        enricher = GraphEnricher(
+            graph_manager,
+            llm_provider,
+            root_path=tmp_path,
+            content_reader=ContentReader(),
+        )
+        await enricher.enrich_nodes(batch_size=10)
+
+        # Assert - Prompt has structured format with code label
+        _system_prompt, user_prompt = llm_provider.send.call_args[0]
+        assert "code:" in user_prompt.lower(), (
+            "Prompt should contain a 'code:' label"
+        )
+        assert "def process_data(items):" in user_prompt, (
+            "Prompt should contain the actual function signature"
+        )
+        assert "result.append(item * 2)" in user_prompt, (
+            "Prompt should contain the function body"
+        )
+
+    @pytest.mark.asyncio
+    async def test_enricher_truncates_long_code(self, tmp_path) -> None:
+        """Code snippets exceeding max_code_lines are truncated with an indicator.
+
+        A function spanning 500 lines with max_code_lines=50 should produce
+        a snippet of exactly 50 code lines plus a truncation indicator showing
+        how many lines were omitted. This prevents token limit issues.
+        """
+        from pathlib import Path
+
+        from codemap.mapper.reader import ContentReader
+
+        # Arrange - Create a file with a very long function (500+ lines)
+        long_lines = ["def long_function():"]
+        for i in range(1, 501):
+            long_lines.append(f"    x_{i} = {i}")
+        source_file = tmp_path / "long.py"
+        source_file.write_text("\n".join(long_lines) + "\n")
+
+        graph_manager = GraphManager()
+        graph_manager.add_file(FileEntry(Path("long.py"), size=10000, token_est=2500))
+        graph_manager.add_node(
+            "long.py",
+            CodeNode(type="function", name="long_function", start_line=1, end_line=501),
+        )
+
+        llm_provider = AsyncMock()
+        llm_provider.send.return_value = (
+            '[{"node_id": "long.py::long_function", "summary": "Long func", "risks": []}]'
+        )
+
+        # Act - Use max_code_lines=50 to trigger truncation
+        enricher = GraphEnricher(
+            graph_manager,
+            llm_provider,
+            root_path=tmp_path,
+            content_reader=ContentReader(),
+            max_code_lines=50,
+        )
+        await enricher.enrich_nodes(batch_size=10)
+
+        # Assert - Prompt contains truncation indicator
+        _system_prompt, user_prompt = llm_provider.send.call_args[0]
+        assert "truncated" in user_prompt.lower(), (
+            "Prompt should indicate that code was truncated"
+        )
+        assert "451 more lines" in user_prompt, (
+            "Truncation indicator should show remaining line count (501 - 50 = 451)"
+        )
+        # Verify the first line is included but not line 51+
+        assert "def long_function():" in user_prompt, (
+            "First line of function should be included"
+        )
+        assert "x_50 = 50" in user_prompt, (
+            "Line 50 should be the last included code line"
+        )
+        assert "x_51 = 51" not in user_prompt, (
+            "Line 51 should NOT be included (truncated)"
+        )
+
+    @pytest.mark.asyncio
+    async def test_enricher_handles_missing_file(self, tmp_path, caplog) -> None:
+        """Missing source files are handled gracefully with a warning.
+
+        When a file referenced by a graph node no longer exists (e.g. deleted
+        after graph build), the enricher should log a warning and fall back
+        to metadata-only mode for that node — without raising an exception.
+        """
+        import logging
+        from pathlib import Path
+
+        # Arrange - Node references a file that doesn't exist
+        graph_manager = GraphManager()
+        graph_manager.add_file(FileEntry(Path("deleted.py"), size=100, token_est=25))
+        graph_manager.add_node(
+            "deleted.py",
+            CodeNode(type="function", name="ghost_func", start_line=1, end_line=5),
+        )
+
+        llm_provider = AsyncMock()
+        llm_provider.send.return_value = (
+            '[{"node_id": "deleted.py::ghost_func", "summary": "Ghost", "risks": []}]'
+        )
+
+        # Act - Should not raise despite missing file
+        from codemap.mapper.reader import ContentReader
+
+        enricher = GraphEnricher(
+            graph_manager,
+            llm_provider,
+            root_path=tmp_path,
+            content_reader=ContentReader(),
+        )
+        with caplog.at_level(logging.WARNING):
+            await enricher.enrich_nodes(batch_size=10)
+
+        # Assert - Warning was logged about missing file
+        assert any("deleted.py" in record.message for record in caplog.records), (
+            "Should log warning mentioning the missing file"
+        )
+        # Assert - Node was still enriched (with metadata-only fallback)
+        assert graph_manager.graph.nodes["deleted.py::ghost_func"]["summary"] == "Ghost"
+
+    @pytest.mark.asyncio
+    async def test_enricher_handles_file_read_error(self, tmp_path, caplog) -> None:
+        """Binary files causing ContentReadError are handled gracefully.
+
+        When ContentReader raises ContentReadError (e.g. for binary files),
+        the enricher should log a warning and fall back to metadata-only
+        mode for that node — without raising an exception.
+        """
+        import logging
+        from pathlib import Path
+
+        from codemap.mapper.reader import ContentReader
+
+        # Arrange - Create a binary file that ContentReader cannot read
+        binary_file = tmp_path / "binary.py"
+        binary_file.write_bytes(b"\x00\x01\x02\xff\xfe\x00\x89PNG")
+
+        graph_manager = GraphManager()
+        graph_manager.add_file(FileEntry(Path("binary.py"), size=100, token_est=25))
+        graph_manager.add_node(
+            "binary.py",
+            CodeNode(type="function", name="binary_func", start_line=1, end_line=5),
+        )
+
+        llm_provider = AsyncMock()
+        llm_provider.send.return_value = (
+            '[{"node_id": "binary.py::binary_func", "summary": "Binary", "risks": []}]'
+        )
+
+        # Act - Should not raise despite read error
+        enricher = GraphEnricher(
+            graph_manager,
+            llm_provider,
+            root_path=tmp_path,
+            content_reader=ContentReader(),
+        )
+        with caplog.at_level(logging.WARNING):
+            await enricher.enrich_nodes(batch_size=10)
+
+        # Assert - Warning was logged about read error
+        assert any("binary.py" in record.message for record in caplog.records), (
+            "Should log warning mentioning the unreadable file"
+        )
+        # Assert - Node was still enriched (with metadata-only fallback)
+        assert graph_manager.graph.nodes["binary.py::binary_func"]["summary"] == "Binary"
+
+    @pytest.mark.asyncio
+    async def test_enricher_without_root_path_uses_metadata_only(self) -> None:
+        """Enricher without root_path works in metadata-only mode (backwards compatible).
+
+        When root_path is not provided, the enricher should work exactly as
+        before — sending only metadata (node names, types, line numbers) to
+        the LLM without attempting to read source files. This ensures
+        backwards compatibility with existing usage.
+        """
+        from pathlib import Path
+
+        # Arrange
+        graph_manager = GraphManager()
+        graph_manager.add_file(FileEntry(Path("test.py"), size=100, token_est=25))
+        graph_manager.add_node(
+            "test.py",
+            CodeNode(type="function", name="my_func", start_line=1, end_line=5),
+        )
+
+        llm_provider = AsyncMock()
+        llm_provider.send.return_value = (
+            '[{"node_id": "test.py::my_func", "summary": "Does stuff", "risks": []}]'
+        )
+
+        # Act - Create enricher WITHOUT root_path (old behavior)
+        enricher = GraphEnricher(graph_manager, llm_provider)
+        await enricher.enrich_nodes(batch_size=10)
+
+        # Assert - Enrichment works (node gets summary)
+        assert graph_manager.graph.nodes["test.py::my_func"]["summary"] == "Does stuff"
+
+        # Assert - Prompt does NOT contain code block (metadata only)
+        _system_prompt, user_prompt = llm_provider.send.call_args[0]
+        assert "```python" not in user_prompt, (
+            "Metadata-only mode should not include python code blocks"
+        )
+
+    @pytest.mark.asyncio
+    async def test_enricher_handles_node_without_separator(self, tmp_path) -> None:
+        """Nodes without '::' separator in node_id get no code extraction.
+
+        Some node types (like file nodes) don't use the 'path::name' format.
+        The enricher should gracefully skip code extraction for these nodes
+        and fall back to metadata-only prompt format.
+        """
+        from pathlib import Path
+
+        from codemap.mapper.reader import ContentReader
+
+        # Arrange - Create a source file
+        source_file = tmp_path / "simple.py"
+        source_file.write_text("x = 1\n")
+
+        graph_manager = GraphManager()
+        graph_manager.add_file(FileEntry(Path("simple.py"), size=50, token_est=10))
+
+        # Manually add a node WITHOUT '::' separator to simulate edge case
+        graph_manager.graph.add_node(
+            "simple.py",
+            type="function",
+            name="orphan",
+            start_line=1,
+            end_line=1,
+        )
+        # Mark it as needing enrichment (no summary)
+
+        llm_provider = AsyncMock()
+        llm_provider.send.return_value = (
+            '[{"node_id": "simple.py", "summary": "Simple module", "risks": []}]'
+        )
+
+        # Act
+        enricher = GraphEnricher(
+            graph_manager,
+            llm_provider,
+            root_path=tmp_path,
+            content_reader=ContentReader(),
+        )
+        await enricher.enrich_nodes(batch_size=10)
+
+        # Assert - Prompt uses fallback (code not available)
+        _system_prompt, user_prompt = llm_provider.send.call_args[0]
+        assert "not available" in user_prompt.lower(), (
+            "Node without '::' should have 'not available' code fallback"
+        )

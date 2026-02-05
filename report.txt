@@ -41,7 +41,7 @@ src/
     ├── SOURCES.txt
     └── top_level.txt
 
-✅ Tree generiert in 0.0006s
+✅ Tree generiert in 0.0005s
 📊 Statistik: 25 Dateien, 8 Ordner
 
 ================================================================================
@@ -59,10 +59,10 @@ src/
    ✅ codemap/core/__init__.py (336 bytes)
    ✅ codemap/core/llm.py (9437 bytes)
    ✅ codemap/engine/__init__.py (221 bytes)
-   ✅ codemap/engine/builder.py (11224 bytes)
+   ✅ codemap/engine/builder.py (12129 bytes)
    ✅ codemap/engine/enricher.py (10497 bytes)
-   ✅ codemap/graph/__init__.py (388 bytes)
-   ✅ codemap/graph/manager.py (10682 bytes)
+   ✅ codemap/graph/__init__.py (1589 bytes)
+   ✅ codemap/graph/manager.py (15579 bytes)
    ✅ codemap/mapper/__init__.py (635 bytes)
    ✅ codemap/mapper/engine.py (11570 bytes)
    ✅ codemap/mapper/languages/__init__.py (0 bytes)
@@ -80,36 +80,123 @@ src/
 3️⃣  PHASE 3: STRUKTUR-SCAN (Parser & Graph)
 --------------------------------------------------------------------------------
 ⚙️  Parse Dateien & Baue Graph...
-   ⚠️ Fehler bei codemap/core/__init__.py: Target node 'codemap.core.llm' not found in graph
-   ⚠️ Fehler bei codemap/core/llm.py: Target node 'os' not found in graph
-   ⚠️ Fehler bei codemap/engine/__init__.py: Target node 'codemap.engine.builder' not found in graph
-   ⚠️ Fehler bei codemap/engine/builder.py: Target node 'logging' not found in graph
-   ⚠️ Fehler bei codemap/engine/enricher.py: Target node 'asyncio' not found in graph
-   ⚠️ Fehler bei codemap/graph/__init__.py: Target node 'codemap.graph.manager' not found in graph
-   ⚠️ Fehler bei codemap/graph/manager.py: Target node 'pathlib' not found in graph
-   ⚠️ Fehler bei codemap/mapper/__init__.py: Target node 'codemap.mapper.engine' not found in graph
-   ⚠️ Fehler bei codemap/mapper/engine.py: Target node 'importlib.resources' not found in graph
    ⚠️ Fehler bei codemap/mapper/languages/python.scm: Unsupported file extension: .scm
-   ⚠️ Fehler bei codemap/mapper/models.py: Target node 'dataclasses' not found in graph
-   ⚠️ Fehler bei codemap/mapper/reader.py: Target node 'pathlib' not found in graph
    ⚠️ Fehler bei codemap/py.typed: Unsupported file extension: .typed
-   ⚠️ Fehler bei codemap/scout/__init__.py: Target node 'codemap.scout.advisor' not found in graph
-   ⚠️ Fehler bei codemap/scout/advisor.py: Target node 'logging' not found in graph
-   ⚠️ Fehler bei codemap/scout/models.py: Target node 'dataclasses' not found in graph
-   ⚠️ Fehler bei codemap/scout/tree.py: Target node 'pathlib' not found in graph
-   ⚠️ Fehler bei codemap/scout/walker.py: Target node 'pathlib' not found in graph
-✅ Graph fertig in 0.020s
-📊 Nodes: 131, Edges: 111
+✅ Graph fertig in 0.016s
+📊 Nodes: 159, Edges: 167
 
 ================================================================================
 4️⃣  PHASE 4: SEMANTIC ENRICHMENT (KI Analyse)
 --------------------------------------------------------------------------------
 ⏳ Sende Code an KI (Parallel Batches)...
-✅ Enrichment fertig in 1.513s
+✅ Enrichment fertig in 1.752s
 
 ================================================================================
 5️⃣  PHASE 5: VOLLSTÄNDIGER REPORT
 ================================================================================
+
+🔹 [UNKNOWN] asyncio
+------------------------------------------------------------
+   (Datei/Import - Kein Enrichment vorgesehen)
+
+👈 USAGE (Incoming):
+   - codemap/engine/enricher.py (UNK)
+
+🔹 [UNKNOWN] codemap.core.llm
+------------------------------------------------------------
+   (Datei/Import - Kein Enrichment vorgesehen)
+
+👈 USAGE (Incoming):
+   - codemap/core/__init__.py (UNK)
+   - codemap/engine/enricher.py (UNK)
+   - codemap/scout/advisor.py (UNK)
+
+🔹 [UNKNOWN] codemap.engine.builder
+------------------------------------------------------------
+   (Datei/Import - Kein Enrichment vorgesehen)
+
+👈 USAGE (Incoming):
+   - codemap/engine/__init__.py (UNK)
+
+🔹 [UNKNOWN] codemap.engine.enricher
+------------------------------------------------------------
+   (Datei/Import - Kein Enrichment vorgesehen)
+
+👈 USAGE (Incoming):
+   - codemap/engine/__init__.py (UNK)
+
+🔹 [UNKNOWN] codemap.graph
+------------------------------------------------------------
+   (Datei/Import - Kein Enrichment vorgesehen)
+
+👈 USAGE (Incoming):
+   - codemap/engine/builder.py (UNK)
+   - codemap/engine/enricher.py (UNK)
+
+🔹 [UNKNOWN] codemap.graph.manager
+------------------------------------------------------------
+   (Datei/Import - Kein Enrichment vorgesehen)
+
+👈 USAGE (Incoming):
+   - codemap/graph/__init__.py (UNK)
+
+🔹 [UNKNOWN] codemap.mapper.engine
+------------------------------------------------------------
+   (Datei/Import - Kein Enrichment vorgesehen)
+
+👈 USAGE (Incoming):
+   - codemap/engine/builder.py (UNK)
+   - codemap/mapper/__init__.py (UNK)
+
+🔹 [UNKNOWN] codemap.mapper.models
+------------------------------------------------------------
+   (Datei/Import - Kein Enrichment vorgesehen)
+
+👈 USAGE (Incoming):
+   - codemap/graph/manager.py (UNK)
+   - codemap/mapper/__init__.py (UNK)
+   - codemap/mapper/engine.py (UNK)
+
+🔹 [UNKNOWN] codemap.mapper.reader
+------------------------------------------------------------
+   (Datei/Import - Kein Enrichment vorgesehen)
+
+👈 USAGE (Incoming):
+   - codemap/engine/builder.py (UNK)
+   - codemap/mapper/__init__.py (UNK)
+
+🔹 [UNKNOWN] codemap.scout.advisor
+------------------------------------------------------------
+   (Datei/Import - Kein Enrichment vorgesehen)
+
+👈 USAGE (Incoming):
+   - codemap/scout/__init__.py (UNK)
+
+🔹 [UNKNOWN] codemap.scout.models
+------------------------------------------------------------
+   (Datei/Import - Kein Enrichment vorgesehen)
+
+👈 USAGE (Incoming):
+   - codemap/graph/manager.py (UNK)
+   - codemap/scout/__init__.py (UNK)
+   - codemap/scout/advisor.py (UNK)
+   - codemap/scout/tree.py (UNK)
+   - codemap/scout/walker.py (UNK)
+
+🔹 [UNKNOWN] codemap.scout.tree
+------------------------------------------------------------
+   (Datei/Import - Kein Enrichment vorgesehen)
+
+👈 USAGE (Incoming):
+   - codemap/scout/__init__.py (UNK)
+
+🔹 [UNKNOWN] codemap.scout.walker
+------------------------------------------------------------
+   (Datei/Import - Kein Enrichment vorgesehen)
+
+👈 USAGE (Incoming):
+   - codemap/engine/builder.py (UNK)
+   - codemap/scout/__init__.py (UNK)
 
 🔹 [FILE] codemap/__init__.py
 ------------------------------------------------------------
@@ -121,6 +208,7 @@ src/
 
 🔗 DEPENDENCIES (Outgoing):
    - UNK -> codemap/core/__init__.py::codemap.core.llm
+   - UNK -> codemap.core.llm
 
 🔹 [IMPORT] codemap/core/__init__.py::codemap.core.llm
 ------------------------------------------------------------
@@ -144,15 +232,19 @@ src/
    - UNK -> codemap/core/llm.py::CerebrasProvider
    - UNK -> codemap/core/llm.py::__init__
    - UNK -> codemap/core/llm.py::get_provider
+   - UNK -> os
+   - UNK -> typing
+   - UNK -> openai
+   - UNK -> tenacity
 
 🔹 [CLASS] codemap/core/llm.py::CerebrasProvider
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This is a class that provides Cerebras-specific LLM functionality.
+   CerebrasProvider is a class that provides an implementation of an LLM provider for Cerebras. It has 79-175 lines of code and is defined in the codemap/core/llm.py file.
 
 ⚠️  AI RISKS:
-   - Potential risk of vendor lock-in due to dependence on Cerebras
-   - Dependence on Cerebras libraries and infrastructure
+   - Complexity due to long code length
+   - Potential for vendor lock-in with Cerebras
 
 👈 USAGE (Incoming):
    - codemap/core/llm.py (UNK)
@@ -160,11 +252,11 @@ src/
 🔹 [CLASS] codemap/core/llm.py::LLMProvider
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This is a class that provides a basic structure for LLM (Large Language Model) providers.
+   LLMProvider is a class that provides a basic structure for LLM (Large Language Model) providers. It has 15-37 lines of code and is defined in the codemap/core/llm.py file.
 
 ⚠️  AI RISKS:
-   - Potential risk of data leakage if not properly implemented
-   - Dependence on third-party libraries for LLM functionality
+   - Insufficient error handling
+   - Potential for tight coupling with other classes
 
 👈 USAGE (Incoming):
    - codemap/core/llm.py (UNK)
@@ -172,11 +264,11 @@ src/
 🔹 [CLASS] codemap/core/llm.py::MockProvider
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This is a mock class for testing LLM provider functionality.
+   MockProvider is a class that provides a mock implementation of an LLM provider. It has 40-76 lines of code and is defined in the codemap/core/llm.py file.
 
 ⚠️  AI RISKS:
-   - Potential risk of incorrect test results if mock implementation is not accurate
-   - Over-reliance on mock data for testing
+   - Insufficient testing of mock implementation
+   - Potential for incorrect behavior in production environment
 
 👈 USAGE (Incoming):
    - codemap/core/llm.py (UNK)
@@ -184,11 +276,11 @@ src/
 🔹 [FUNCTION] codemap/core/llm.py::__init__
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This is the constructor function for the LLMProvider class.
+   The __init__ function is a constructor for a class in the codemap/core/llm.py file. It has 104-117 lines of code and is responsible for initializing the object.
 
 ⚠️  AI RISKS:
-   - Potential risk of incorrect initialization if parameters are not properly validated
-   - Dependence on correct configuration for functionality
+   - Insufficient validation of input parameters
+   - Potential for incorrect object state
 
 👈 USAGE (Incoming):
    - codemap/core/llm.py (UNK)
@@ -196,11 +288,11 @@ src/
 🔹 [FUNCTION] codemap/core/llm.py::get_provider
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This function returns an instance of an LLM provider based on configuration.
+   The get_provider function is defined in the codemap/core/llm.py file and has 178-245 lines of code. It appears to be responsible for retrieving an LLM provider instance.
 
 ⚠️  AI RISKS:
-   - Potential risk of incorrect provider selection if configuration is not properly validated
-   - Dependence on correct configuration for functionality
+   - Complexity due to long code length
+   - Potential for incorrect provider instance retrieval
 
 👈 USAGE (Incoming):
    - codemap/core/llm.py (UNK)
@@ -222,11 +314,11 @@ src/
 🔹 [FUNCTION] codemap/core/llm.py::send
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This function sends a request to an LLM provider.
+   The send function is defined in the codemap/core/llm.py file and has 125-175 lines of code. It appears to be responsible for sending data to an LLM provider.
 
 ⚠️  AI RISKS:
-   - Potential risk of data exposure if request is not properly encrypted
-   - Dependence on network connectivity for functionality
+   - Complexity due to long code length
+   - Potential for data corruption or loss during transmission
 
 👈 USAGE (Incoming):
    - codemap/core/llm.py (UNK)
@@ -252,6 +344,8 @@ src/
 🔗 DEPENDENCIES (Outgoing):
    - UNK -> codemap/engine/__init__.py::codemap.engine.builder
    - UNK -> codemap/engine/__init__.py::codemap.engine.enricher
+   - UNK -> codemap.engine.builder
+   - UNK -> codemap.engine.enricher
 
 🔹 [IMPORT] codemap/engine/__init__.py::codemap.engine.builder
 ------------------------------------------------------------
@@ -282,15 +376,21 @@ src/
    - UNK -> codemap/engine/builder.py::__init__
    - UNK -> codemap/engine/builder.py::build
    - UNK -> codemap/engine/builder.py::_resolve_and_add_import
+   - UNK -> logging
+   - UNK -> pathlib
+   - UNK -> codemap.graph
+   - UNK -> codemap.mapper.engine
+   - UNK -> codemap.mapper.reader
+   - UNK -> codemap.scout.walker
 
 🔹 [CLASS] codemap/engine/builder.py::MapBuilder
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This is a class that builds a map of code elements.
+   MapBuilder is a class that provides a basic structure for building maps. It has 33-286 lines of code and is defined in the codemap/engine/builder.py file.
 
 ⚠️  AI RISKS:
-   - Potential risk of incorrect mapping if code elements are not properly parsed
-   - Dependence on correct parsing for functionality
+   - Insufficient error handling
+   - Potential for tight coupling with other classes
 
 👈 USAGE (Incoming):
    - codemap/engine/builder.py (UNK)
@@ -298,11 +398,11 @@ src/
 🔹 [FUNCTION] codemap/engine/builder.py::__init__
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This is the constructor function for the MapBuilder class.
+   The __init__ function is a constructor for the MapBuilder class in the codemap/engine/builder.py file. It has 90-100 lines of code and is responsible for initializing the object.
 
 ⚠️  AI RISKS:
-   - Potential risk of incorrect initialization if parameters are not properly validated
-   - Dependence on correct configuration for functionality
+   - Insufficient validation of input parameters
+   - Potential for incorrect object state
 
 👈 USAGE (Incoming):
    - codemap/engine/builder.py (UNK)
@@ -310,11 +410,11 @@ src/
 🔹 [FUNCTION] codemap/engine/builder.py::_resolve_and_add_import
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This function resolves and adds imports to the map.
+   The _resolve_and_add_import function is defined in the codemap/engine/builder.py file and has 197-286 lines of code. It appears to be responsible for resolving and adding imports to a map.
 
 ⚠️  AI RISKS:
-   - Potential risk of incorrect import resolution if dependencies are not properly managed
-   - Dependence on correct dependency management for functionality
+   - Complexity due to long code length
+   - Potential for incorrect import resolution
 
 👈 USAGE (Incoming):
    - codemap/engine/builder.py (UNK)
@@ -322,11 +422,11 @@ src/
 🔹 [FUNCTION] codemap/engine/builder.py::build
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This function builds a map of code elements.
+   The build function is defined in the codemap/engine/builder.py file and has 102-195 lines of code. It appears to be responsible for building a map.
 
 ⚠️  AI RISKS:
-   - Potential risk of incorrect mapping if code elements are not properly parsed
-   - Dependence on correct parsing for functionality
+   - Complexity due to long code length
+   - Potential for incorrect map construction
 
 👈 USAGE (Incoming):
    - codemap/engine/builder.py (UNK)
@@ -390,15 +490,23 @@ src/
    - UNK -> codemap/engine/enricher.py::__init__
    - UNK -> codemap/engine/enricher.py::enrich_nodes
    - UNK -> codemap/engine/enricher.py::_enrich_batch
+   - UNK -> asyncio
+   - UNK -> logging
+   - UNK -> re
+   - UNK -> typing
+   - UNK -> openai
+   - UNK -> orjson
+   - UNK -> codemap.core.llm
+   - UNK -> codemap.graph
 
 🔹 [CLASS] codemap/engine/enricher.py::GraphEnricher
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This is a class that enriches a graph of code elements.
+   GraphEnricher is a class that provides a basic structure for enriching graphs. It has 22-251 lines of code and is defined in the codemap/engine/enricher.py file.
 
 ⚠️  AI RISKS:
-   - Potential risk of incorrect enrichment if code elements are not properly parsed
-   - Dependence on correct parsing for functionality
+   - Insufficient error handling
+   - Potential for tight coupling with other classes
 
 👈 USAGE (Incoming):
    - codemap/engine/enricher.py (UNK)
@@ -406,11 +514,11 @@ src/
 🔹 [FUNCTION] codemap/engine/enricher.py::__init__
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This is the constructor function for the GraphEnricher class.
+   The __init__ function is a constructor for the GraphEnricher class in the codemap/engine/enricher.py file. It has 64-82 lines of code and is responsible for initializing the object.
 
 ⚠️  AI RISKS:
-   - Potential risk of incorrect initialization if parameters are not properly validated
-   - Dependence on correct configuration for functionality
+   - Insufficient validation of input parameters
+   - Potential for incorrect object state
 
 👈 USAGE (Incoming):
    - codemap/engine/enricher.py (UNK)
@@ -418,11 +526,11 @@ src/
 🔹 [FUNCTION] codemap/engine/enricher.py::_enrich_batch
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This function enriches a batch of nodes in the graph.
+   The _enrich_batch function is defined in the codemap/engine/enricher.py file and has 136-251 lines of code. It appears to be responsible for enriching a batch of nodes in a graph.
 
 ⚠️  AI RISKS:
-   - Potential risk of incorrect enrichment if code elements are not properly parsed
-   - Dependence on correct parsing for functionality
+   - Complexity due to long code length
+   - Potential for incorrect batch enrichment
 
 👈 USAGE (Incoming):
    - codemap/engine/enricher.py (UNK)
@@ -451,11 +559,11 @@ src/
 🔹 [FUNCTION] codemap/engine/enricher.py::enrich_nodes
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This function enriches nodes in the graph.
+   The enrich_nodes function is defined in the codemap/engine/enricher.py file and has 84-134 lines of code. It appears to be responsible for enriching nodes in a graph.
 
 ⚠️  AI RISKS:
-   - Potential risk of incorrect enrichment if code elements are not properly parsed
-   - Dependence on correct parsing for functionality
+   - Complexity due to long code length
+   - Potential for incorrect node enrichment
 
 👈 USAGE (Incoming):
    - codemap/engine/enricher.py (UNK)
@@ -501,6 +609,7 @@ src/
 
 🔗 DEPENDENCIES (Outgoing):
    - UNK -> codemap/graph/__init__.py::codemap.graph.manager
+   - UNK -> codemap.graph.manager
 
 🔹 [IMPORT] codemap/graph/__init__.py::codemap.graph.manager
 ------------------------------------------------------------
@@ -527,17 +636,24 @@ src/
    - UNK -> codemap/graph/manager.py::add_file
    - UNK -> codemap/graph/manager.py::add_node
    - UNK -> codemap/graph/manager.py::add_dependency
+   - UNK -> codemap/graph/manager.py::add_external_module
    - UNK -> codemap/graph/manager.py::save
    - UNK -> codemap/graph/manager.py::load
+   - UNK -> pathlib
+   - UNK -> typing
+   - UNK -> orjson
+   - UNK -> networkx.readwrite
+   - UNK -> codemap.mapper.models
+   - UNK -> codemap.scout.models
 
 🔹 [CLASS] codemap/graph/manager.py::GraphManager
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This is a class that manages a graph of code elements.
+   GraphManager is a class that provides a basic structure for managing graphs. It has 21-394 lines of code and is defined in the codemap/graph/manager.py file.
 
 ⚠️  AI RISKS:
-   - Potential risk of incorrect graph management if code elements are not properly parsed
-   - Dependence on correct parsing for functionality
+   - Insufficient error handling
+   - Potential for tight coupling with other classes
 
 👈 USAGE (Incoming):
    - codemap/graph/manager.py (UNK)
@@ -545,11 +661,11 @@ src/
 🔹 [FUNCTION] codemap/graph/manager.py::__init__
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This is the constructor function for the GraphManager class.
+   The __init__ function is a constructor for the GraphManager class in the codemap/graph/manager.py file. It has 82-84 lines of code and is responsible for initializing the object.
 
 ⚠️  AI RISKS:
-   - Potential risk of incorrect initialization if parameters are not properly validated
-   - Dependence on correct configuration for functionality
+   - Insufficient validation of input parameters
+   - Potential for incorrect object state
 
 👈 USAGE (Incoming):
    - codemap/graph/manager.py (UNK)
@@ -557,11 +673,23 @@ src/
 🔹 [FUNCTION] codemap/graph/manager.py::add_dependency
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This function adds a dependency to the managed graph.
+   The add_dependency function is defined in the codemap/graph/manager.py file and has 203-262 lines of code. It appears to be responsible for adding a dependency to a graph.
 
 ⚠️  AI RISKS:
-   - Potential risk of incorrect dependency addition if dependency is not properly parsed
-   - Dependence on correct parsing for functionality
+   - Complexity due to long code length
+   - Potential for incorrect dependency addition
+
+👈 USAGE (Incoming):
+   - codemap/graph/manager.py (UNK)
+
+🔹 [FUNCTION] codemap/graph/manager.py::add_external_module
+------------------------------------------------------------
+🧠 AI SUMMARY:
+   The add_external_module function is defined in the codemap/graph/manager.py file and has 264-318 lines of code. It appears to be responsible for adding an external module to a graph.
+
+⚠️  AI RISKS:
+   - Complexity due to long code length
+   - Potential for incorrect module addition
 
 👈 USAGE (Incoming):
    - codemap/graph/manager.py (UNK)
@@ -569,11 +697,11 @@ src/
 🔹 [FUNCTION] codemap/graph/manager.py::add_file
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This function adds a file to the managed graph.
+   The add_file function is defined in the codemap/graph/manager.py file and has 133-157 lines of code. It appears to be responsible for adding a file to a graph.
 
 ⚠️  AI RISKS:
-   - Potential risk of incorrect file addition if file is not properly parsed
-   - Dependence on correct parsing for functionality
+   - Complexity due to long code length
+   - Potential for incorrect file addition
 
 👈 USAGE (Incoming):
    - codemap/graph/manager.py (UNK)
@@ -581,11 +709,11 @@ src/
 🔹 [FUNCTION] codemap/graph/manager.py::add_node
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This function adds a node to the managed graph.
+   The add_node function is defined in the codemap/graph/manager.py file and has 159-201 lines of code. It appears to be responsible for adding a node to a graph.
 
 ⚠️  AI RISKS:
-   - Potential risk of incorrect node addition if node is not properly parsed
-   - Dependence on correct parsing for functionality
+   - Complexity due to long code length
+   - Potential for incorrect node addition
 
 👈 USAGE (Incoming):
    - codemap/graph/manager.py (UNK)
@@ -607,11 +735,11 @@ src/
 🔹 [FUNCTION] codemap/graph/manager.py::graph
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This function returns the managed graph.
+   The graph function is defined in the codemap/graph/manager.py file and has 87-113 lines of code. It appears to be responsible for retrieving a graph.
 
 ⚠️  AI RISKS:
-   - Potential risk of incorrect graph retrieval if graph is not properly updated
-   - Dependence on correct graph updates for functionality
+   - Complexity due to long code length
+   - Potential for incorrect graph retrieval
 
 👈 USAGE (Incoming):
    - codemap/graph/manager.py (UNK)
@@ -619,11 +747,11 @@ src/
 🔹 [FUNCTION] codemap/graph/manager.py::graph_stats
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This function returns statistics about the managed graph.
+   The graph_stats function is defined in the codemap/graph/manager.py file and has 116-131 lines of code. It appears to be responsible for retrieving graph statistics.
 
 ⚠️  AI RISKS:
-   - Potential risk of incorrect statistics if graph is not properly updated
-   - Dependence on correct graph updates for functionality
+   - Complexity due to long code length
+   - Potential for incorrect statistics retrieval
 
 👈 USAGE (Incoming):
    - codemap/graph/manager.py (UNK)
@@ -631,11 +759,11 @@ src/
 🔹 [FUNCTION] codemap/graph/manager.py::load
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This function loads a saved graph.
+   The load function is defined in the codemap/graph/manager.py file and has 345-394 lines of code. It appears to be responsible for loading a graph.
 
 ⚠️  AI RISKS:
-   - Potential risk of data corruption if graph is not properly loaded
-   - Dependence on correct storage for functionality
+   - Complexity due to long code length
+   - Potential for incorrect graph loading
 
 👈 USAGE (Incoming):
    - codemap/graph/manager.py (UNK)
@@ -664,11 +792,11 @@ src/
 🔹 [FUNCTION] codemap/graph/manager.py::save
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This function saves the managed graph.
+   The save function is defined in the codemap/graph/manager.py file and has 320-343 lines of code. It appears to be responsible for saving a graph.
 
 ⚠️  AI RISKS:
-   - Potential risk of data loss if graph is not properly saved
-   - Dependence on correct storage for functionality
+   - Complexity due to long code length
+   - Potential for incorrect graph saving
 
 👈 USAGE (Incoming):
    - codemap/graph/manager.py (UNK)
@@ -688,6 +816,9 @@ src/
    - UNK -> codemap/mapper/__init__.py::codemap.mapper.engine
    - UNK -> codemap/mapper/__init__.py::codemap.mapper.models
    - UNK -> codemap/mapper/__init__.py::codemap.mapper.reader
+   - UNK -> codemap.mapper.engine
+   - UNK -> codemap.mapper.models
+   - UNK -> codemap.mapper.reader
 
 🔹 [IMPORT] codemap/mapper/__init__.py::codemap.mapper.engine
 ------------------------------------------------------------
@@ -730,15 +861,21 @@ src/
    - UNK -> codemap/mapper/engine.py::_flatten_captures
    - UNK -> codemap/mapper/engine.py::parse
    - UNK -> codemap/mapper/engine.py::parse_file
+   - UNK -> importlib.resources
+   - UNK -> pathlib
+   - UNK -> typing
+   - UNK -> tree_sitter
+   - UNK -> tree_sitter_language_pack
+   - UNK -> codemap.mapper.models
 
 🔹 [CLASS] codemap/mapper/engine.py::ParserEngine
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This is a class that provides parsing functionality for code elements.
+   ParserEngine is a class that provides a basic structure for parsing code. It has 46-296 lines of code and is defined in the codemap/mapper/engine.py file.
 
 ⚠️  AI RISKS:
-   - Potential risk of incorrect parsing if code elements are not properly formatted
-   - Dependence on correct parsing for functionality
+   - Insufficient error handling
+   - Potential for tight coupling with other classes
 
 👈 USAGE (Incoming):
    - codemap/mapper/engine.py (UNK)
@@ -746,11 +883,11 @@ src/
 🔹 [FUNCTION] codemap/mapper/engine.py::__init__
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This is the constructor function for the ParserEngine class.
+   The __init__ function is a constructor for the ParserEngine class in the codemap/mapper/engine.py file. It has 82-84 lines of code and is responsible for initializing the object.
 
 ⚠️  AI RISKS:
-   - Potential risk of incorrect initialization if parameters are not properly validated
-   - Dependence on correct configuration for functionality
+   - Insufficient validation of input parameters
+   - Potential for incorrect object state
 
 👈 USAGE (Incoming):
    - codemap/mapper/engine.py (UNK)
@@ -758,11 +895,11 @@ src/
 🔹 [FUNCTION] codemap/mapper/engine.py::_flatten_captures
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This function flattens captures in a query.
+   The _flatten_captures function is defined in the codemap/mapper/engine.py file and has 138-152 lines of code. It appears to be responsible for flattening captures.
 
 ⚠️  AI RISKS:
-   - Potential risk of incorrect capture flattening if query is not properly formatted
-   - Dependence on correct query formatting for functionality
+   - Complexity due to long code length
+   - Potential for incorrect capture flattening
 
 👈 USAGE (Incoming):
    - codemap/mapper/engine.py (UNK)
@@ -770,11 +907,11 @@ src/
 🔹 [FUNCTION] codemap/mapper/engine.py::_load_query_from_file
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This function loads a query from a file.
+   The _load_query_from_file function is defined in the codemap/mapper/engine.py file and has 86-104 lines of code. It appears to be responsible for loading a query from a file.
 
 ⚠️  AI RISKS:
-   - Potential risk of incorrect query loading if file is not properly formatted
-   - Dependence on correct file formatting for functionality
+   - Complexity due to long code length
+   - Potential for incorrect query loading
 
 👈 USAGE (Incoming):
    - codemap/mapper/engine.py (UNK)
@@ -782,11 +919,11 @@ src/
 🔹 [FUNCTION] codemap/mapper/engine.py::cached_languages
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This function returns a list of cached languages.
+   The cached_languages function is defined in the codemap/mapper/engine.py file and has 107-116 lines of code. It appears to be responsible for retrieving a list of cached languages.
 
 ⚠️  AI RISKS:
-   - Potential risk of incorrect language caching if languages are not properly configured
-   - Dependence on correct configuration for functionality
+   - Insufficient language caching
+   - Potential for incorrect language retrieval
 
 👈 USAGE (Incoming):
    - codemap/mapper/engine.py (UNK)
@@ -801,11 +938,11 @@ src/
 🔹 [FUNCTION] codemap/mapper/engine.py::get_language_id
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This function returns the ID of a language.
+   The get_language_id function is defined in the codemap/mapper/engine.py file and has 118-136 lines of code. It appears to be responsible for retrieving a language ID.
 
 ⚠️  AI RISKS:
-   - Potential risk of incorrect language ID retrieval if language is not properly configured
-   - Dependence on correct configuration for functionality
+   - Complexity due to long code length
+   - Potential for incorrect language ID retrieval
 
 👈 USAGE (Incoming):
    - codemap/mapper/engine.py (UNK)
@@ -813,11 +950,11 @@ src/
 🔹 [FUNCTION] codemap/mapper/engine.py::get_supported_languages
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This function returns a list of supported languages.
+   The get_supported_languages function is defined in the codemap/mapper/engine.py file and has 23-43 lines of code. It appears to be responsible for retrieving a list of supported languages.
 
 ⚠️  AI RISKS:
-   - Potential risk of incorrect language support if languages are not properly configured
-   - Dependence on correct configuration for functionality
+   - Insufficient language support
+   - Potential for incorrect language retrieval
 
 👈 USAGE (Incoming):
    - codemap/mapper/engine.py (UNK)
@@ -832,11 +969,11 @@ src/
 🔹 [FUNCTION] codemap/mapper/engine.py::parse
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This function parses a query.
+   The parse function is defined in the codemap/mapper/engine.py file and has 154-256 lines of code. It appears to be responsible for parsing code.
 
 ⚠️  AI RISKS:
-   - Potential risk of incorrect parsing if query is not properly formatted
-   - Dependence on correct parsing for functionality
+   - Complexity due to long code length
+   - Potential for incorrect parsing
 
 👈 USAGE (Incoming):
    - codemap/mapper/engine.py (UNK)
@@ -844,11 +981,11 @@ src/
 🔹 [FUNCTION] codemap/mapper/engine.py::parse_file
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This function parses a file.
+   The parse_file function is defined in the codemap/mapper/engine.py file and has 258-296 lines of code. It appears to be responsible for parsing a file.
 
 ⚠️  AI RISKS:
-   - Potential risk of incorrect parsing if file is not properly formatted
-   - Dependence on correct parsing for functionality
+   - Complexity due to long code length
+   - Potential for incorrect file parsing
 
 👈 USAGE (Incoming):
    - codemap/mapper/engine.py (UNK)
@@ -898,15 +1035,16 @@ src/
    - UNK -> codemap/mapper/models.py::QueryLoadError
    - UNK -> codemap/mapper/models.py::__init__
    - UNK -> codemap/mapper/models.py::CodeNode
+   - UNK -> dataclasses
 
 🔹 [CLASS] codemap/mapper/models.py::CodeNode
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This is a class that represents a code node.
+   CodeNode is a class that represents a node in a code graph. It has 36-63 lines of code and is defined in the codemap/mapper/models.py file.
 
 ⚠️  AI RISKS:
-   - Potential risk of incorrect node representation if node is not properly parsed
-   - Dependence on correct parsing for functionality
+   - Insufficient error handling
+   - Potential for tight coupling with other classes
 
 👈 USAGE (Incoming):
    - codemap/mapper/models.py (UNK)
@@ -914,11 +1052,11 @@ src/
 🔹 [CLASS] codemap/mapper/models.py::QueryLoadError
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This is a class that represents a query load error.
+   QueryLoadError is a class that represents an error that occurs when loading a query. It has 10-32 lines of code and is defined in the codemap/mapper/models.py file.
 
 ⚠️  AI RISKS:
-   - Potential risk of incorrect error handling if error is not properly caught
-   - Dependence on correct error handling for functionality
+   - Insufficient error handling
+   - Potential for incorrect error reporting
 
 👈 USAGE (Incoming):
    - codemap/mapper/models.py (UNK)
@@ -926,11 +1064,11 @@ src/
 🔹 [FUNCTION] codemap/mapper/models.py::__init__
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This is the constructor function for the QueryLoadError class.
+   The __init__ function is a constructor for the QueryLoadError class in the codemap/mapper/models.py file. It has 24-32 lines of code and is responsible for initializing the object.
 
 ⚠️  AI RISKS:
-   - Potential risk of incorrect initialization if parameters are not properly validated
-   - Dependence on correct configuration for functionality
+   - Insufficient validation of input parameters
+   - Potential for incorrect object state
 
 👈 USAGE (Incoming):
    - codemap/mapper/models.py (UNK)
@@ -952,15 +1090,16 @@ src/
    - UNK -> codemap/mapper/reader.py::ContentReader
    - UNK -> codemap/mapper/reader.py::__init__
    - UNK -> codemap/mapper/reader.py::read_file
+   - UNK -> pathlib
 
 🔹 [CLASS] codemap/mapper/reader.py::ContentReadError
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This is a class that represents a content read error.
+   ContentReadError is a class that represents an error that occurs when reading content. It has 10-13 lines of code and is defined in the codemap/mapper/reader.py file.
 
 ⚠️  AI RISKS:
-   - Potential risk of incorrect error handling if error is not properly caught
-   - Dependence on correct error handling for functionality
+   - Insufficient error handling
+   - Potential for incorrect error reporting
 
 👈 USAGE (Incoming):
    - codemap/mapper/reader.py (UNK)
@@ -968,11 +1107,11 @@ src/
 🔹 [CLASS] codemap/mapper/reader.py::ContentReader
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This is a class that provides content reading functionality.
+   ContentReader is a class that provides a basic structure for reading content. It has 16-77 lines of code and is defined in the codemap/mapper/reader.py file.
 
 ⚠️  AI RISKS:
-   - Potential risk of incorrect content reading if content is not properly formatted
-   - Dependence on correct content formatting for functionality
+   - Insufficient error handling
+   - Potential for tight coupling with other classes
 
 👈 USAGE (Incoming):
    - codemap/mapper/reader.py (UNK)
@@ -980,11 +1119,11 @@ src/
 🔹 [FUNCTION] codemap/mapper/reader.py::__init__
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This is the constructor function for the ContentReader class.
+   The __init__ function is a constructor for the ContentReader class in the codemap/mapper/reader.py file. It has 35-37 lines of code and is responsible for initializing the object.
 
 ⚠️  AI RISKS:
-   - Potential risk of incorrect initialization if parameters are not properly validated
-   - Dependence on correct configuration for functionality
+   - Insufficient validation of input parameters
+   - Potential for incorrect object state
 
 👈 USAGE (Incoming):
    - codemap/mapper/reader.py (UNK)
@@ -999,11 +1138,11 @@ src/
 🔹 [FUNCTION] codemap/mapper/reader.py::read_file
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This function reads a file.
+   The read_file function is defined in the codemap/mapper/reader.py file and has 39-77 lines of code. It appears to be responsible for reading a file.
 
 ⚠️  AI RISKS:
-   - Potential risk of incorrect file reading if file is not properly formatted
-   - Dependence on correct file formatting for functionality
+   - Complexity due to long code length
+   - Potential for incorrect file reading
 
 👈 USAGE (Incoming):
    - codemap/mapper/reader.py (UNK)
@@ -1021,6 +1160,10 @@ src/
    - UNK -> codemap/scout/__init__.py::codemap.scout.models
    - UNK -> codemap/scout/__init__.py::codemap.scout.tree
    - UNK -> codemap/scout/__init__.py::codemap.scout.walker
+   - UNK -> codemap.scout.advisor
+   - UNK -> codemap.scout.models
+   - UNK -> codemap.scout.tree
+   - UNK -> codemap.scout.walker
 
 🔹 [IMPORT] codemap/scout/__init__.py::codemap.scout.advisor
 ------------------------------------------------------------
@@ -1064,15 +1207,19 @@ src/
    - UNK -> codemap/scout/advisor.py::analyze
    - UNK -> codemap/scout/advisor.py::_is_valid_pattern
    - UNK -> codemap/scout/advisor.py::_normalize_line
+   - UNK -> logging
+   - UNK -> re
+   - UNK -> codemap.core.llm
+   - UNK -> codemap.scout.models
 
 🔹 [CLASS] codemap/scout/advisor.py::StructureAdvisor
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This is a class that provides structure advising functionality.
+   StructureAdvisor is a class that provides a basic structure for advising on code structure. It has 26-204 lines of code and is defined in the codemap/scout/advisor.py file.
 
 ⚠️  AI RISKS:
-   - Potential risk of incorrect advising if code structure is not properly analyzed
-   - Dependence on correct analysis for functionality
+   - Insufficient error handling
+   - Potential for tight coupling with other classes
 
 👈 USAGE (Incoming):
    - codemap/scout/advisor.py (UNK)
@@ -1080,11 +1227,11 @@ src/
 🔹 [FUNCTION] codemap/scout/advisor.py::__init__
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This is the constructor function for the StructureAdvisor class.
+   The __init__ function is a constructor for the StructureAdvisor class in the codemap/scout/advisor.py file. It has 56-63 lines of code and is responsible for initializing the object.
 
 ⚠️  AI RISKS:
-   - Potential risk of incorrect initialization if parameters are not properly validated
-   - Dependence on correct configuration for functionality
+   - Insufficient validation of input parameters
+   - Potential for incorrect object state
 
 👈 USAGE (Incoming):
    - codemap/scout/advisor.py (UNK)
@@ -1092,11 +1239,11 @@ src/
 🔹 [FUNCTION] codemap/scout/advisor.py::_is_valid_pattern
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This function checks if a pattern is valid.
+   The _is_valid_pattern function is defined in the codemap/scout/advisor.py file and has 146-179 lines of code. It appears to be responsible for checking if a pattern is valid.
 
 ⚠️  AI RISKS:
-   - Potential risk of incorrect pattern validation if pattern is not properly formatted
-   - Dependence on correct pattern formatting for functionality
+   - Complexity due to long code length
+   - Potential for incorrect pattern validation
 
 👈 USAGE (Incoming):
    - codemap/scout/advisor.py (UNK)
@@ -1104,11 +1251,11 @@ src/
 🔹 [FUNCTION] codemap/scout/advisor.py::_normalize_line
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This function normalizes a line of code.
+   The _normalize_line function is defined in the codemap/scout/advisor.py file and has 181-204 lines of code. It appears to be responsible for normalizing a line of code.
 
 ⚠️  AI RISKS:
-   - Potential risk of incorrect line normalization if line is not properly formatted
-   - Dependence on correct line formatting for functionality
+   - Complexity due to long code length
+   - Potential for incorrect line normalization
 
 👈 USAGE (Incoming):
    - codemap/scout/advisor.py (UNK)
@@ -1116,11 +1263,11 @@ src/
 🔹 [FUNCTION] codemap/scout/advisor.py::analyze
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This function analyzes code structure.
+   The analyze function is defined in the codemap/scout/advisor.py file and has 65-144 lines of code. It appears to be responsible for analyzing code structure.
 
 ⚠️  AI RISKS:
-   - Potential risk of incorrect analysis if code structure is not properly parsed
-   - Dependence on correct parsing for functionality
+   - Complexity due to long code length
+   - Potential for incorrect analysis
 
 👈 USAGE (Incoming):
    - codemap/scout/advisor.py (UNK)
@@ -1162,15 +1309,17 @@ src/
    - UNK -> codemap/scout/models.py::pathlib
    - UNK -> codemap/scout/models.py::TreeReport
    - UNK -> codemap/scout/models.py::FileEntry
+   - UNK -> dataclasses
+   - UNK -> pathlib
 
 🔹 [CLASS] codemap/scout/models.py::FileEntry
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This is a class that represents a file entry.
+   FileEntry is a class that represents a file entry in a code tree. It has 46-73 lines of code and is defined in the codemap/scout/models.py file.
 
 ⚠️  AI RISKS:
-   - Potential risk of incorrect file entry representation if file is not properly parsed
-   - Dependence on correct parsing for functionality
+   - Insufficient error handling
+   - Potential for tight coupling with other classes
 
 👈 USAGE (Incoming):
    - codemap/scout/models.py (UNK)
@@ -1178,11 +1327,11 @@ src/
 🔹 [CLASS] codemap/scout/models.py::TreeReport
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This is a class that represents a tree report.
+   TreeReport is a class that represents a report on a code tree. It has 12-42 lines of code and is defined in the codemap/scout/models.py file.
 
 ⚠️  AI RISKS:
-   - Potential risk of incorrect report generation if tree is not properly analyzed
-   - Dependence on correct analysis for functionality
+   - Insufficient error handling
+   - Potential for incorrect report generation
 
 👈 USAGE (Incoming):
    - codemap/scout/models.py (UNK)
@@ -1215,15 +1364,18 @@ src/
    - UNK -> codemap/scout/tree.py::_load_gitignore
    - UNK -> codemap/scout/tree.py::_should_ignore
    - UNK -> codemap/scout/tree.py::_generate_tree
+   - UNK -> pathlib
+   - UNK -> pathspec
+   - UNK -> codemap.scout.models
 
 🔹 [CLASS] codemap/scout/tree.py::TreeGenerator
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This is a class that generates a tree of code elements.
+   TreeGenerator is a class that provides a basic structure for generating code trees. It has 109-303 lines of code and is defined in the codemap/scout/tree.py file.
 
 ⚠️  AI RISKS:
-   - Potential risk of incorrect tree generation if code elements are not properly parsed
-   - Dependence on correct parsing for functionality
+   - Insufficient error handling
+   - Potential for tight coupling with other classes
 
 👈 USAGE (Incoming):
    - codemap/scout/tree.py (UNK)
@@ -1231,11 +1383,11 @@ src/
 🔹 [FUNCTION] codemap/scout/tree.py::__init__
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This is the constructor function for the TreeGenerator class.
+   The __init__ function is a constructor for the TreeGenerator class in the codemap/scout/tree.py file. It has 123-124 lines of code and is responsible for initializing the object.
 
 ⚠️  AI RISKS:
-   - Potential risk of incorrect initialization if parameters are not properly validated
-   - Dependence on correct configuration for functionality
+   - Insufficient validation of input parameters
+   - Potential for incorrect object state
 
 👈 USAGE (Incoming):
    - codemap/scout/tree.py (UNK)
@@ -1243,11 +1395,11 @@ src/
 🔹 [FUNCTION] codemap/scout/tree.py::_generate_tree
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This function generates a tree-like structure representing the file system.
+   Generates a tree data structure from a given directory. The function recursively traverses the directory, ignoring files and directories that match .gitignore patterns, and returns a tree representation of the directory structure.
 
 ⚠️  AI RISKS:
-   - Potential memory issues if the tree structure is too large
-   - Inconsistent tree structure if the generation logic is flawed
+   - Potential performance issues if the directory structure is very deep or complex
+   - Incorrect tree generation if .gitignore patterns are not correctly applied
 
 👈 USAGE (Incoming):
    - codemap/scout/tree.py (UNK)
@@ -1255,11 +1407,11 @@ src/
 🔹 [FUNCTION] codemap/scout/tree.py::_load_gitignore
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This function loads a .gitignore file.
+   Loads .gitignore file and returns its contents. The function reads the .gitignore file line by line, strips leading/trailing whitespaces, and checks for empty lines or lines starting with '#'. It returns a set of patterns to ignore.
 
 ⚠️  AI RISKS:
-   - Potential risk of incorrect .gitignore loading if file is not properly formatted
-   - Dependence on correct file formatting for functionality
+   - Potential file reading errors if .gitignore file does not exist or cannot be read
+   - Inefficient use of memory if .gitignore file is very large
 
 👈 USAGE (Incoming):
    - codemap/scout/tree.py (UNK)
@@ -1267,11 +1419,11 @@ src/
 🔹 [FUNCTION] codemap/scout/tree.py::_should_ignore
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This function determines whether a file or directory should be ignored based on certain conditions.
+   Checks if a given path should be ignored based on .gitignore patterns. The function takes a path and a set of patterns as input, and returns True if the path matches any of the patterns, False otherwise.
 
 ⚠️  AI RISKS:
-   - Potential false positives or negatives if the ignore conditions are not correctly implemented
-   - Inefficient performance if the function is not optimized for large file systems
+   - Potential performance issues if the number of patterns is very large
+   - Incorrect ignore logic if patterns are not correctly formatted
 
 👈 USAGE (Incoming):
    - codemap/scout/tree.py (UNK)
@@ -1286,11 +1438,11 @@ src/
 🔹 [FUNCTION] codemap/scout/tree.py::generate
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This function generates a tree of code elements.
+   The generate function is defined in the codemap/scout/tree.py file and has 126-173 lines of code. It appears to be responsible for generating a code tree.
 
 ⚠️  AI RISKS:
-   - Potential risk of incorrect tree generation if code elements are not properly parsed
-   - Dependence on correct parsing for functionality
+   - Complexity due to long code length
+   - Potential for incorrect tree generation
 
 👈 USAGE (Incoming):
    - codemap/scout/tree.py (UNK)
@@ -1321,15 +1473,18 @@ src/
    - UNK -> codemap/scout/walker.py::__init__
    - UNK -> codemap/scout/walker.py::_load_gitignore
    - UNK -> codemap/scout/walker.py::walk
+   - UNK -> pathlib
+   - UNK -> pathspec
+   - UNK -> codemap.scout.models
 
 🔹 [CLASS] codemap/scout/walker.py::FileWalker
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This class is responsible for walking through the file system and performing certain actions.
+   A class that walks through a directory and performs actions on files. The class has methods to load .gitignore patterns, initialize the walker, and walk through the directory.
 
 ⚠️  AI RISKS:
-   - Potential issues with file system traversal if the walker is not correctly implemented
-   - Inefficient performance if the walker is not optimized for large file systems
+   - Potential issues with file handling and permissions
+   - Inconsistent behavior if walker is not properly initialized
 
 👈 USAGE (Incoming):
    - codemap/scout/walker.py (UNK)
@@ -1337,11 +1492,11 @@ src/
 🔹 [FUNCTION] codemap/scout/walker.py::__init__
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This is the constructor method for the FileWalker class, initializing the object's state.
+   Initializes the FileWalker class. The method sets the root directory and loads .gitignore patterns.
 
 ⚠️  AI RISKS:
-   - Potential issues with object initialization if the constructor is not correctly implemented
-   - Insecure default values if not properly set
+   - Potential issues with root directory not being set correctly
+   - Inconsistent behavior if .gitignore patterns are not loaded correctly
 
 👈 USAGE (Incoming):
    - codemap/scout/walker.py (UNK)
@@ -1349,11 +1504,11 @@ src/
 🔹 [FUNCTION] codemap/scout/walker.py::_load_gitignore
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This function loads the .gitignore file and applies its rules to the file system traversal.
+   Loads .gitignore file and returns its contents. The function reads the .gitignore file line by line, strips leading/trailing whitespaces, and checks for empty lines or lines starting with '#'. It returns a set of patterns to ignore.
 
 ⚠️  AI RISKS:
-   - Potential issues with .gitignore parsing if the function is not correctly implemented
-   - Inconsistent ignore rules if the .gitignore file is not correctly formatted
+   - Potential file reading errors if .gitignore file does not exist or cannot be read
+   - Inefficient use of memory if .gitignore file is very large
 
 👈 USAGE (Incoming):
    - codemap/scout/walker.py (UNK)
@@ -1382,14 +1537,128 @@ src/
 🔹 [FUNCTION] codemap/scout/walker.py::walk
 ------------------------------------------------------------
 🧠 AI SUMMARY:
-   This method performs the actual file system traversal, applying the ignore rules and other logic.
+   Walks through the directory and performs actions on files. The method uses the loaded .gitignore patterns to ignore files and directories, and calls a callback function for each file.
 
 ⚠️  AI RISKS:
-   - Potential issues with file system traversal if the walk method is not correctly implemented
-   - Inefficient performance if the walk method is not optimized for large file systems
+   - Potential performance issues if the directory structure is very deep or complex
+   - Incorrect behavior if callback function is not properly defined
 
 👈 USAGE (Incoming):
    - codemap/scout/walker.py (UNK)
 
+🔹 [UNKNOWN] dataclasses
+------------------------------------------------------------
+   (Datei/Import - Kein Enrichment vorgesehen)
+
+👈 USAGE (Incoming):
+   - codemap/mapper/models.py (UNK)
+   - codemap/scout/models.py (UNK)
+
+🔹 [UNKNOWN] importlib.resources
+------------------------------------------------------------
+   (Datei/Import - Kein Enrichment vorgesehen)
+
+👈 USAGE (Incoming):
+   - codemap/mapper/engine.py (UNK)
+
+🔹 [UNKNOWN] logging
+------------------------------------------------------------
+   (Datei/Import - Kein Enrichment vorgesehen)
+
+👈 USAGE (Incoming):
+   - codemap/engine/builder.py (UNK)
+   - codemap/engine/enricher.py (UNK)
+   - codemap/scout/advisor.py (UNK)
+
+🔹 [UNKNOWN] networkx.readwrite
+------------------------------------------------------------
+   (Datei/Import - Kein Enrichment vorgesehen)
+
+👈 USAGE (Incoming):
+   - codemap/graph/manager.py (UNK)
+
+🔹 [UNKNOWN] openai
+------------------------------------------------------------
+   (Datei/Import - Kein Enrichment vorgesehen)
+
+👈 USAGE (Incoming):
+   - codemap/core/llm.py (UNK)
+   - codemap/engine/enricher.py (UNK)
+
+🔹 [UNKNOWN] orjson
+------------------------------------------------------------
+   (Datei/Import - Kein Enrichment vorgesehen)
+
+👈 USAGE (Incoming):
+   - codemap/engine/enricher.py (UNK)
+   - codemap/graph/manager.py (UNK)
+
+🔹 [UNKNOWN] os
+------------------------------------------------------------
+   (Datei/Import - Kein Enrichment vorgesehen)
+
+👈 USAGE (Incoming):
+   - codemap/core/llm.py (UNK)
+
+🔹 [UNKNOWN] pathlib
+------------------------------------------------------------
+   (Datei/Import - Kein Enrichment vorgesehen)
+
+👈 USAGE (Incoming):
+   - codemap/engine/builder.py (UNK)
+   - codemap/graph/manager.py (UNK)
+   - codemap/mapper/engine.py (UNK)
+   - codemap/mapper/reader.py (UNK)
+   - codemap/scout/models.py (UNK)
+   - codemap/scout/tree.py (UNK)
+   - codemap/scout/walker.py (UNK)
+
+🔹 [UNKNOWN] pathspec
+------------------------------------------------------------
+   (Datei/Import - Kein Enrichment vorgesehen)
+
+👈 USAGE (Incoming):
+   - codemap/scout/tree.py (UNK)
+   - codemap/scout/walker.py (UNK)
+
+🔹 [UNKNOWN] re
+------------------------------------------------------------
+   (Datei/Import - Kein Enrichment vorgesehen)
+
+👈 USAGE (Incoming):
+   - codemap/engine/enricher.py (UNK)
+   - codemap/scout/advisor.py (UNK)
+
+🔹 [UNKNOWN] tenacity
+------------------------------------------------------------
+   (Datei/Import - Kein Enrichment vorgesehen)
+
+👈 USAGE (Incoming):
+   - codemap/core/llm.py (UNK)
+
+🔹 [UNKNOWN] tree_sitter
+------------------------------------------------------------
+   (Datei/Import - Kein Enrichment vorgesehen)
+
+👈 USAGE (Incoming):
+   - codemap/mapper/engine.py (UNK)
+
+🔹 [UNKNOWN] tree_sitter_language_pack
+------------------------------------------------------------
+   (Datei/Import - Kein Enrichment vorgesehen)
+
+👈 USAGE (Incoming):
+   - codemap/mapper/engine.py (UNK)
+
+🔹 [UNKNOWN] typing
+------------------------------------------------------------
+   (Datei/Import - Kein Enrichment vorgesehen)
+
+👈 USAGE (Incoming):
+   - codemap/core/llm.py (UNK)
+   - codemap/engine/enricher.py (UNK)
+   - codemap/graph/manager.py (UNK)
+   - codemap/mapper/engine.py (UNK)
+
 ================================================================================
-🏁 DONE. 131 Elemente angezeigt.
+🏁 DONE. 159 Elemente angezeigt.
