@@ -7,7 +7,7 @@ of code relationships using NetworkX.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import networkx as nx
 import orjson
@@ -82,6 +82,26 @@ class GraphManager:
     def __init__(self) -> None:
         """Initialize GraphManager with an empty directed graph."""
         self._graph: nx.DiGraph[str] = nx.DiGraph()
+        self._build_metadata: dict[str, Any] = {}
+
+    @property
+    def build_metadata(self) -> dict[str, Any]:
+        """Return build metadata for incremental updates.
+
+        Stores metadata about the last graph build for change detection:
+        - commit_hash: Git commit hash of last build
+        - file_hashes: Dict mapping file paths to SHA-256 hashes
+
+        Returns:
+            Mutable dictionary for storing build metadata.
+
+        Example:
+            >>> manager = GraphManager()
+            >>> manager.build_metadata["commit_hash"] = "abc123"
+            >>> manager.build_metadata["commit_hash"]
+            'abc123'
+        """
+        return self._build_metadata
 
     @property
     def graph(self) -> nx.DiGraph[str]:
@@ -317,6 +337,70 @@ class GraphManager:
 
         return node_id
 
+    def remove_node(self, node_id: str) -> None:
+        """Remove a node and all its edges from the graph.
+
+        Removes the specified node along with all incoming and outgoing edges.
+        NetworkX automatically handles edge cleanup when a node is removed.
+
+        Args:
+            node_id: ID of the node to remove.
+
+        Raises:
+            ValueError: If node does not exist in graph.
+
+        Example:
+            >>> manager = GraphManager()
+            >>> manager.add_file(FileEntry(Path("src/test.py"), 100, 25))
+            >>> manager.remove_node("src/test.py")
+            >>> "src/test.py" in manager.graph.nodes
+            False
+        """
+        if node_id not in self._graph.nodes:
+            raise ValueError(f"Node '{node_id}' not found in graph")
+        self._graph.remove_node(node_id)
+
+    def remove_file(self, file_id: str) -> None:
+        """Remove a file node and all contained code nodes.
+
+        Finds all nodes connected via CONTAINS edge (code elements like functions
+        and classes) and removes them, then removes the file node itself. All
+        edges (CONTAINS and IMPORTS) are automatically removed by NetworkX.
+
+        Args:
+            file_id: ID of the file node to remove.
+
+        Raises:
+            ValueError: If node does not exist in graph.
+            ValueError: If node exists but is not a file node (type != "file").
+
+        Example:
+            >>> manager = GraphManager()
+            >>> manager.add_file(FileEntry(Path("src/test.py"), 100, 25))
+            >>> manager.add_node("src/test.py", CodeNode("function", "func", 1, 10))
+            >>> manager.remove_file("src/test.py")
+            >>> "src/test.py" in manager.graph.nodes
+            False
+            >>> "src/test.py::func" in manager.graph.nodes
+            False
+        """
+        if file_id not in self._graph.nodes:
+            raise ValueError(f"Node '{file_id}' not found in graph")
+        if self._graph.nodes[file_id].get("type") != "file":
+            raise ValueError(f"Node '{file_id}' is not a file node")
+
+        # Collect children connected via CONTAINS edges
+        children = [
+            target
+            for _, target, data in self._graph.out_edges(file_id, data=True)
+            if data.get("relationship") == "CONTAINS"
+        ]
+
+        # Remove children first, then the file node
+        for child_id in children:
+            self._graph.remove_node(child_id)
+        self._graph.remove_node(file_id)
+
     def add_project(self, name: str) -> None:
         """Add a project root node (level 0) to the graph.
 
@@ -463,6 +547,8 @@ class GraphManager:
         """
         path.parent.mkdir(parents=True, exist_ok=True)
         data = json_graph.node_link_data(self._graph)
+        # Add build_metadata to serialized data
+        data["build_metadata"] = self._build_metadata
         path.write_bytes(orjson.dumps(data))
 
     def load(self, path: Path) -> None:
@@ -515,3 +601,6 @@ class GraphManager:
         # Copy all edges with their attributes
         for source, target, attrs in temp_graph.edges(data=True):
             self._graph.add_edge(source, target, **attrs)
+
+        # Restore build_metadata if present
+        self._build_metadata = data.get("build_metadata", {})

@@ -6,6 +6,7 @@ and will fail until implementation is complete.
 """
 
 from pathlib import Path
+from typing import Any
 
 import networkx as nx
 import pytest
@@ -161,17 +162,14 @@ class TestGraphManagerHierarchy:
         # Assert CONTAINS edge exists
         assert manager.graph.has_edge("src/app.py", "src/app.py::calculate")
         assert (
-            manager.graph.edges["src/app.py", "src/app.py::calculate"]["relationship"]
-            == "CONTAINS"
+            manager.graph.edges["src/app.py", "src/app.py::calculate"]["relationship"] == "CONTAINS"
         )
 
     def test_add_multiple_code_nodes_same_file(self) -> None:
         """Test add_node creates multiple nodes with correct edges."""
         manager = GraphManager()
         manager.add_file(FileEntry(Path("src/models.py"), 1024, 256))
-        func_node = CodeNode(
-            type="function", name="process_data", start_line=5, end_line=10
-        )
+        func_node = CodeNode(type="function", name="process_data", start_line=5, end_line=10)
         class_node = CodeNode(type="class", name="DataModel", start_line=15, end_line=30)
 
         manager.add_node("src/models.py", func_node)
@@ -201,9 +199,7 @@ class TestGraphManagerHierarchy:
         manager.add_dependency("src/main.py", "src/utils.py")
 
         assert manager.graph.has_edge("src/main.py", "src/utils.py")
-        assert (
-            manager.graph.edges["src/main.py", "src/utils.py"]["relationship"] == "IMPORTS"
-        )
+        assert manager.graph.edges["src/main.py", "src/utils.py"]["relationship"] == "IMPORTS"
 
     def test_add_node_without_parent_file_raises_error(self) -> None:
         """Test add_node without parent file raises ValueError."""
@@ -302,9 +298,7 @@ class TestGraphManagerHierarchy:
 
         # Assert IMPORTS edge was created
         assert manager.graph.has_edge("src/main.py", "external::os")
-        assert (
-            manager.graph.edges["src/main.py", "external::os"]["relationship"] == "IMPORTS"
-        )
+        assert manager.graph.edges["src/main.py", "external::os"]["relationship"] == "IMPORTS"
 
         # Assert lazy-created node has no attributes (except implicit ID)
         # NetworkX nodes always have the node_id, but should have no other attributes
@@ -335,8 +329,7 @@ class TestGraphManagerHierarchy:
         assert manager.graph.number_of_edges() == 1
         assert manager.graph.has_edge("src/main.py", "external::idempotent")
         assert (
-            manager.graph.edges["src/main.py", "external::idempotent"]["relationship"]
-            == "IMPORTS"
+            manager.graph.edges["src/main.py", "external::idempotent"]["relationship"] == "IMPORTS"
         )
 
         # Lazy-created node should still have no attributes
@@ -532,12 +525,8 @@ class TestGraphManagerPersistence:
         manager2.load(tmp_path / "graph.json")
 
         # Assert counts match
-        assert (
-            manager2.graph.number_of_nodes() == manager.graph.number_of_nodes()
-        )
-        assert (
-            manager2.graph.number_of_edges() == manager.graph.number_of_edges()
-        )
+        assert manager2.graph.number_of_nodes() == manager.graph.number_of_nodes()
+        assert manager2.graph.number_of_edges() == manager.graph.number_of_edges()
         # Assert specific nodes exist
         assert "src/app.py" in manager2.graph.nodes
         assert "src/app.py::main" in manager2.graph.nodes
@@ -559,21 +548,11 @@ class TestGraphManagerPersistence:
         manager.add_file(FileEntry(Path("src/utils.py"), 512, 128))
         manager.add_file(FileEntry(Path("src/models.py"), 768, 192))
 
-        manager.add_node(
-            "src/main.py", CodeNode("function", "main", 1, 10)
-        )
-        manager.add_node(
-            "src/main.py", CodeNode("function", "run", 12, 20)
-        )
-        manager.add_node(
-            "src/utils.py", CodeNode("function", "helper", 1, 5)
-        )
-        manager.add_node(
-            "src/models.py", CodeNode("class", "User", 1, 50)
-        )
-        manager.add_node(
-            "src/models.py", CodeNode("class", "Order", 52, 100)
-        )
+        manager.add_node("src/main.py", CodeNode("function", "main", 1, 10))
+        manager.add_node("src/main.py", CodeNode("function", "run", 12, 20))
+        manager.add_node("src/utils.py", CodeNode("function", "helper", 1, 5))
+        manager.add_node("src/models.py", CodeNode("class", "User", 1, 50))
+        manager.add_node("src/models.py", CodeNode("class", "Order", 52, 100))
 
         manager.add_dependency("src/main.py", "src/utils.py")
         manager.add_dependency("src/main.py", "src/models.py")
@@ -600,10 +579,21 @@ class TestGraphManagerPersistence:
 
         # Verify edges
         assert manager2.graph.has_edge("src/main.py", "src/utils.py")
-        assert (
-            manager2.graph.edges["src/main.py", "src/utils.py"]["relationship"]
-            == "IMPORTS"
-        )
+        assert manager2.graph.edges["src/main.py", "src/utils.py"]["relationship"] == "IMPORTS"
+
+    def test_save_load_preserves_build_metadata(self, tmp_path: Path) -> None:
+        """save() and load() preserve build_metadata."""
+        manager = GraphManager()
+        manager.build_metadata["commit_hash"] = "abc123"
+        manager.build_metadata["file_hashes"] = {"a.py": "hash1"}
+
+        manager.save(tmp_path / "graph.json")
+
+        manager2 = GraphManager()
+        manager2.load(tmp_path / "graph.json")
+
+        assert manager2.build_metadata["commit_hash"] == "abc123"
+        assert manager2.build_metadata["file_hashes"] == {"a.py": "hash1"}
 
     def test_load_invalid_json_raises_error(self, tmp_path: Path) -> None:
         """Test load raises error for invalid JSON."""
@@ -612,7 +602,9 @@ class TestGraphManagerPersistence:
 
         manager = GraphManager()
 
-        with pytest.raises((ValueError, Exception)):  # orjson.JSONDecodeError is a ValueError subclass
+        with pytest.raises(
+            (ValueError, Exception)
+        ):  # orjson.JSONDecodeError is a ValueError subclass
             manager.load(invalid_file)
 
     def test_load_invalid_graph_schema_raises_error(self, tmp_path: Path) -> None:
@@ -966,3 +958,166 @@ class TestHierarchyBuilding:
         assert manager.graph.nodes["a"]["level"] == 1
         assert manager.graph.nodes["a/b/c/d/e/f"]["level"] == 6
         assert manager.graph.nodes["a/b/c/d/e/f/deep.py"]["level"] == 7
+
+
+class TestRemoveOperations:
+    """Test suite for node removal operations."""
+
+    # --- remove_node() tests ---
+
+    def test_remove_node_removes_from_graph(self) -> None:
+        """remove_node() removes the specified node from the graph."""
+        manager = GraphManager()
+        manager.add_file(FileEntry(Path("src/test.py"), size=100, token_est=25))
+
+        manager.remove_node("src/test.py")
+
+        assert "src/test.py" not in manager.graph.nodes
+
+    def test_remove_node_removes_incoming_edges(self) -> None:
+        """remove_node() removes edges pointing TO the removed node."""
+        manager = GraphManager()
+        manager.add_file(FileEntry(Path("src/test.py"), size=100, token_est=25))
+        manager.add_node("src/test.py", CodeNode("function", "func", 1, 10))
+
+        manager.remove_node("src/test.py::func")
+
+        assert not list(manager.graph.out_edges("src/test.py", data=True))
+
+    def test_remove_node_removes_outgoing_edges(self) -> None:
+        """remove_node() removes edges pointing FROM the removed node."""
+        manager = GraphManager()
+        manager.add_file(FileEntry(Path("src/a.py"), size=100, token_est=25))
+        manager.add_file(FileEntry(Path("src/b.py"), size=100, token_est=25))
+        manager.add_dependency("src/a.py", "src/b.py")
+
+        manager.remove_node("src/a.py")
+
+        assert not list(manager.graph.in_edges("src/b.py"))
+
+    def test_remove_node_nonexistent_raises(self) -> None:
+        """remove_node() raises ValueError for non-existent node."""
+        manager = GraphManager()
+
+        with pytest.raises(ValueError, match="not found"):
+            manager.remove_node("nonexistent")
+
+    def test_remove_node_preserves_other_nodes(self) -> None:
+        """remove_node() preserves other nodes and their edges."""
+        manager = GraphManager()
+        manager.add_file(FileEntry(Path("src/a.py"), size=100, token_est=25))
+        manager.add_file(FileEntry(Path("src/b.py"), size=100, token_est=25))
+        manager.add_node("src/b.py", CodeNode("function", "helper", 1, 10))
+
+        manager.remove_node("src/a.py")
+
+        assert "src/b.py" in manager.graph.nodes
+        assert "src/b.py::helper" in manager.graph.nodes
+        assert manager.graph.has_edge("src/b.py", "src/b.py::helper")
+
+    # --- remove_file() tests ---
+
+    def test_remove_file_removes_file_and_children(self) -> None:
+        """remove_file() removes file node and all contained code nodes."""
+        manager = GraphManager()
+        manager.add_file(FileEntry(Path("src/test.py"), size=100, token_est=25))
+        manager.add_node("src/test.py", CodeNode("function", "func_a", 1, 10))
+        manager.add_node("src/test.py", CodeNode("class", "MyClass", 11, 30))
+
+        manager.remove_file("src/test.py")
+
+        assert "src/test.py" not in manager.graph.nodes
+        assert "src/test.py::func_a" not in manager.graph.nodes
+        assert "src/test.py::MyClass" not in manager.graph.nodes
+
+    def test_remove_file_removes_import_edges(self) -> None:
+        """remove_file() removes IMPORTS edges to/from the file."""
+        manager = GraphManager()
+        manager.add_file(FileEntry(Path("src/a.py"), size=100, token_est=25))
+        manager.add_file(FileEntry(Path("src/b.py"), size=100, token_est=25))
+        manager.add_dependency("src/a.py", "src/b.py")
+
+        manager.remove_file("src/a.py")
+
+        assert not list(manager.graph.in_edges("src/b.py"))
+
+    def test_remove_file_preserves_other_files(self) -> None:
+        """remove_file() preserves other file nodes and their children."""
+        manager = GraphManager()
+        manager.add_file(FileEntry(Path("src/a.py"), size=100, token_est=25))
+        manager.add_node("src/a.py", CodeNode("function", "func_a", 1, 10))
+        manager.add_file(FileEntry(Path("src/b.py"), size=100, token_est=25))
+        manager.add_node("src/b.py", CodeNode("function", "func_b", 1, 10))
+
+        manager.remove_file("src/a.py")
+
+        assert "src/b.py" in manager.graph.nodes
+        assert "src/b.py::func_b" in manager.graph.nodes
+        assert manager.graph.has_edge("src/b.py", "src/b.py::func_b")
+
+    def test_remove_file_not_a_file_raises(self) -> None:
+        """remove_file() raises ValueError for non-file node."""
+        manager = GraphManager()
+        manager.add_file(FileEntry(Path("src/test.py"), size=100, token_est=25))
+        manager.add_node("src/test.py", CodeNode("function", "func", 1, 10))
+
+        with pytest.raises(ValueError, match="not a file node"):
+            manager.remove_file("src/test.py::func")
+
+    def test_remove_file_nonexistent_raises(self) -> None:
+        """remove_file() raises ValueError for non-existent node."""
+        manager = GraphManager()
+
+        with pytest.raises(ValueError, match="not found"):
+            manager.remove_file("nonexistent.py")
+
+
+class TestBuildMetadata:
+    """Tests for build_metadata property."""
+
+    def test_build_metadata_initializes_empty(self) -> None:
+        """build_metadata property returns empty dict on new instance."""
+        manager = GraphManager()
+
+        result: dict[str, Any] = manager.build_metadata
+
+        assert result == {}
+        assert isinstance(result, dict)
+
+    def test_build_metadata_can_store_commit_hash(self) -> None:
+        """build_metadata can store commit_hash."""
+        manager = GraphManager()
+
+        manager.build_metadata["commit_hash"] = "abc123def456"
+
+        assert manager.build_metadata["commit_hash"] == "abc123def456"
+
+    def test_build_metadata_can_store_file_hashes(self) -> None:
+        """build_metadata can store file_hashes dict."""
+        manager = GraphManager()
+        file_hashes = {"src/a.py": "hash1", "src/b.py": "hash2"}
+
+        manager.build_metadata["file_hashes"] = file_hashes
+
+        assert manager.build_metadata["file_hashes"] == file_hashes
+
+    def test_build_metadata_persists_across_operations(self) -> None:
+        """build_metadata survives add_file/add_node operations."""
+        manager = GraphManager()
+        manager.build_metadata["commit_hash"] = "persist_test"
+
+        manager.add_file(FileEntry(Path("src/test.py"), size=100, token_est=25))
+        manager.add_node("src/test.py", CodeNode("function", "func", 1, 10))
+
+        assert manager.build_metadata["commit_hash"] == "persist_test"
+
+    def test_build_metadata_is_mutable_dict(self) -> None:
+        """build_metadata returns mutable dict allowing updates."""
+        manager = GraphManager()
+
+        metadata = manager.build_metadata
+        metadata["key1"] = "value1"
+        metadata["key2"] = "value2"
+
+        assert manager.build_metadata["key1"] == "value1"
+        assert manager.build_metadata["key2"] == "value2"
