@@ -91,7 +91,10 @@ class TestEnrichNodesBatching:
         for i in range(10):
             graph_manager.add_node(
                 "test.py",
-                CodeNode(type="class", name=f"Class_{i}", start_line=100 + i * 10, end_line=100 + i * 10 + 8),
+                CodeNode(
+                    type="class", name=f"Class_{i}",
+                    start_line=100 + i * 10, end_line=100 + i * 10 + 8,
+                ),
             )
 
         # Mock LLMProvider to track calls and return valid JSON
@@ -1342,6 +1345,117 @@ class TestEnricherCodeContent:
         )
 
     @pytest.mark.asyncio
+    async def test_enricher_auto_creates_content_reader(self, tmp_path) -> None:
+        """Enricher auto-creates ContentReader when root_path given but no reader.
+
+        When root_path is provided without an explicit content_reader, the
+        enricher should create its own ContentReader internally and use it
+        for code extraction — enabling the simplest possible API for callers.
+        """
+        from pathlib import Path
+
+        # Arrange - Create a source file
+        source_file = tmp_path / "auto.py"
+        source_file.write_text("def auto_func():\n    return 42\n")
+
+        graph_manager = GraphManager()
+        graph_manager.add_file(FileEntry(Path("auto.py"), size=50, token_est=10))
+        graph_manager.add_node(
+            "auto.py",
+            CodeNode(type="function", name="auto_func", start_line=1, end_line=2),
+        )
+
+        llm_provider = AsyncMock()
+        llm_provider.send.return_value = (
+            '[{"node_id": "auto.py::auto_func", "summary": "Returns 42", "risks": []}]'
+        )
+
+        # Act - Create enricher with root_path but NO content_reader
+        enricher = GraphEnricher(
+            graph_manager,
+            llm_provider,
+            root_path=tmp_path,
+        )
+        await enricher.enrich_nodes(batch_size=10)
+
+        # Assert - Code was extracted (auto-created ContentReader worked)
+        _system_prompt, user_prompt = llm_provider.send.call_args[0]
+        assert "def auto_func():" in user_prompt, (
+            "Auto-created ContentReader should enable code extraction"
+        )
+        assert "return 42" in user_prompt
+
+    @pytest.mark.asyncio
+    async def test_extract_code_snippet_returns_none_without_root_path(self) -> None:
+        """_extract_code_snippet returns None when enricher has no root_path.
+
+        When enricher is in metadata-only mode (no root_path), calling
+        _extract_code_snippet directly should return None without errors.
+        """
+        # Arrange - Create enricher WITHOUT root_path
+        graph_manager = GraphManager()
+        llm_provider = AsyncMock()
+        enricher = GraphEnricher(graph_manager, llm_provider)
+
+        # Act
+        result = enricher._extract_code_snippet("file.py::func", 1, 5)
+
+        # Assert
+        assert result is None, (
+            "_extract_code_snippet should return None without root_path"
+        )
+
+    @pytest.mark.asyncio
+    async def test_enricher_handles_node_without_line_numbers(self, tmp_path) -> None:
+        """Nodes without start_line or end_line get 'not available' code fallback.
+
+        When a node has None for start_line or end_line, the enricher should
+        skip code extraction and show 'not available' in the prompt instead
+        of crashing on None arithmetic.
+        """
+        from pathlib import Path
+
+        from codemap.mapper.reader import ContentReader
+
+        # Arrange - Create a source file
+        source_file = tmp_path / "nolines.py"
+        source_file.write_text("x = 1\n")
+
+        graph_manager = GraphManager()
+        graph_manager.add_file(FileEntry(Path("nolines.py"), size=50, token_est=10))
+
+        # Manually add a node with None line numbers
+        graph_manager.graph.add_node(
+            "nolines.py::no_lines_func",
+            type="function",
+            name="no_lines_func",
+            start_line=None,
+            end_line=None,
+        )
+        # Add containment edge so it's recognized
+        graph_manager.graph.add_edge("nolines.py", "nolines.py::no_lines_func", type="contains")
+
+        llm_provider = AsyncMock()
+        llm_provider.send.return_value = (
+            '[{"node_id": "nolines.py::no_lines_func", "summary": "No lines", "risks": []}]'
+        )
+
+        # Act
+        enricher = GraphEnricher(
+            graph_manager,
+            llm_provider,
+            root_path=tmp_path,
+            content_reader=ContentReader(),
+        )
+        await enricher.enrich_nodes(batch_size=10)
+
+        # Assert - Prompt uses fallback (not available)
+        _system_prompt, user_prompt = llm_provider.send.call_args[0]
+        assert "not available" in user_prompt.lower(), (
+            "Node without line numbers should have 'not available' code fallback"
+        )
+
+    @pytest.mark.asyncio
     async def test_truncation_keeps_exactly_max_code_lines(self, tmp_path) -> None:
         """Truncation produces exactly max_code_lines code lines, not one more.
 
@@ -1400,4 +1514,242 @@ class TestEnricherCodeContent:
         # Line 6 must NOT appear in the code lines
         assert "line_6" not in snippet, (
             "line_6 should NOT appear in truncated snippet (exceeds max_code_lines=5)"
+        )
+
+    @pytest.mark.asyncio
+    async def test_extract_code_snippet_returns_none_for_inverted_range(self, tmp_path) -> None:
+        """_extract_code_snippet returns None when start_line > end_line.
+
+        An inverted line range (e.g. start_line=10, end_line=3) is invalid and
+        should produce None so that _enrich_batch writes '- code: (not available)'.
+        A warning should be logged for diagnostics.
+        """
+
+        from codemap.mapper.reader import ContentReader
+
+        # Arrange - Create a file with content
+        source_file = tmp_path / "inverted.py"
+        source_file.write_text("line1\nline2\nline3\nline4\nline5\n")
+
+        graph_manager = GraphManager()
+        llm_provider = AsyncMock()
+        enricher = GraphEnricher(
+            graph_manager,
+            llm_provider,
+            root_path=tmp_path,
+            content_reader=ContentReader(),
+        )
+
+        # Act - Call with inverted range (start > end)
+        result = enricher._extract_code_snippet("inverted.py::func", 10, 3)
+
+        # Assert
+        assert result is None, (
+            "_extract_code_snippet should return None for inverted range (start_line > end_line)"
+        )
+
+    @pytest.mark.asyncio
+    async def test_inverted_range_produces_not_available_in_prompt(self, tmp_path) -> None:
+        """Inverted line range in a node produces '- code: (not available)' in prompt.
+
+        When a node has start_line > end_line, the enricher should fall back
+        to the 'not available' prompt format instead of an empty code block.
+        """
+        from pathlib import Path
+
+        from codemap.mapper.reader import ContentReader
+
+        # Arrange - Create a file with content
+        source_file = tmp_path / "inverted_prompt.py"
+        source_file.write_text("line1\nline2\nline3\nline4\nline5\n")
+
+        graph_manager = GraphManager()
+        graph_manager.add_file(FileEntry(Path("inverted_prompt.py"), size=50, token_est=10))
+
+        # Add node with inverted line range
+        graph_manager.graph.add_node(
+            "inverted_prompt.py::bad_func",
+            type="function",
+            name="bad_func",
+            start_line=10,
+            end_line=3,
+        )
+        graph_manager.graph.add_edge(
+            "inverted_prompt.py", "inverted_prompt.py::bad_func", type="contains"
+        )
+
+        llm_provider = AsyncMock()
+        llm_provider.send.return_value = (
+            '[{"node_id": "inverted_prompt.py::bad_func", "summary": "Bad", "risks": []}]'
+        )
+
+        # Act
+        enricher = GraphEnricher(
+            graph_manager,
+            llm_provider,
+            root_path=tmp_path,
+            content_reader=ContentReader(),
+        )
+        await enricher.enrich_nodes(batch_size=10)
+
+        # Assert - Prompt uses fallback
+        _system_prompt, user_prompt = llm_provider.send.call_args[0]
+        assert "- code: (not available)" in user_prompt, (
+            "Inverted line range should produce '- code: (not available)' fallback"
+        )
+        assert "```" not in user_prompt, (
+            "Inverted line range should NOT produce a code block"
+        )
+
+    @pytest.mark.asyncio
+    async def test_extract_code_snippet_returns_none_for_empty_file(self, tmp_path) -> None:
+        """_extract_code_snippet returns None for an empty file.
+
+        When the source file is empty, the line slice will be empty too.
+        The method should return None so the prompt gets '- code: (not available)'.
+        """
+
+        from codemap.mapper.reader import ContentReader
+
+        # Arrange - Create an empty file
+        source_file = tmp_path / "empty.py"
+        source_file.write_text("")
+
+        graph_manager = GraphManager()
+        llm_provider = AsyncMock()
+        enricher = GraphEnricher(
+            graph_manager,
+            llm_provider,
+            root_path=tmp_path,
+            content_reader=ContentReader(),
+        )
+
+        # Act - Try to extract from empty file
+        result = enricher._extract_code_snippet("empty.py::func", 1, 5)
+
+        # Assert
+        assert result is None, (
+            "_extract_code_snippet should return None for empty file (empty snippet)"
+        )
+
+    @pytest.mark.asyncio
+    async def test_extract_code_snippet_returns_none_for_short_file(self, tmp_path) -> None:
+        """_extract_code_snippet returns None when file has fewer lines than start_line.
+
+        When the file has 2 lines but the node starts at line 10, the slice
+        is empty and should return None.
+        """
+
+        from codemap.mapper.reader import ContentReader
+
+        # Arrange - Create a short file (2 lines)
+        source_file = tmp_path / "short.py"
+        source_file.write_text("line1\nline2\n")
+
+        graph_manager = GraphManager()
+        llm_provider = AsyncMock()
+        enricher = GraphEnricher(
+            graph_manager,
+            llm_provider,
+            root_path=tmp_path,
+            content_reader=ContentReader(),
+        )
+
+        # Act - Try to extract lines 10-15 from a 2-line file
+        result = enricher._extract_code_snippet("short.py::func", 10, 15)
+
+        # Assert
+        assert result is None, (
+            "_extract_code_snippet should return None when file has fewer lines than start_line"
+        )
+
+    @pytest.mark.asyncio
+    async def test_empty_file_produces_not_available_in_prompt(self, tmp_path) -> None:
+        """Empty source file produces '- code: (not available)' in the prompt.
+
+        When the source file is empty, the enricher should fall back to
+        the metadata-only format without any code block.
+        """
+        from pathlib import Path
+
+        from codemap.mapper.reader import ContentReader
+
+        # Arrange - Create an empty file
+        source_file = tmp_path / "empty_prompt.py"
+        source_file.write_text("")
+
+        graph_manager = GraphManager()
+        graph_manager.add_file(FileEntry(Path("empty_prompt.py"), size=0, token_est=0))
+        graph_manager.add_node(
+            "empty_prompt.py",
+            CodeNode(type="function", name="empty_func", start_line=1, end_line=5),
+        )
+
+        llm_provider = AsyncMock()
+        llm_provider.send.return_value = (
+            '[{"node_id": "empty_prompt.py::empty_func", "summary": "Empty", "risks": []}]'
+        )
+
+        # Act
+        enricher = GraphEnricher(
+            graph_manager,
+            llm_provider,
+            root_path=tmp_path,
+            content_reader=ContentReader(),
+        )
+        await enricher.enrich_nodes(batch_size=10)
+
+        # Assert - Prompt uses fallback
+        _system_prompt, user_prompt = llm_provider.send.call_args[0]
+        assert "- code: (not available)" in user_prompt, (
+            "Empty file should produce '- code: (not available)' fallback"
+        )
+
+    @pytest.mark.asyncio
+    async def test_empty_snippet_string_treated_as_not_available(self, tmp_path) -> None:
+        """An empty string from _extract_code_snippet is treated like None.
+
+        If _extract_code_snippet somehow returns an empty string (e.g. file
+        with only whitespace producing blank join), _enrich_batch should treat
+        it as 'not available' instead of writing an empty code block.
+        """
+        from pathlib import Path
+        from unittest.mock import patch
+
+        from codemap.mapper.reader import ContentReader
+
+        # Arrange
+        source_file = tmp_path / "whitespace.py"
+        source_file.write_text("def func():\n    pass\n")
+
+        graph_manager = GraphManager()
+        graph_manager.add_file(FileEntry(Path("whitespace.py"), size=50, token_est=10))
+        graph_manager.add_node(
+            "whitespace.py",
+            CodeNode(type="function", name="func", start_line=1, end_line=2),
+        )
+
+        llm_provider = AsyncMock()
+        llm_provider.send.return_value = (
+            '[{"node_id": "whitespace.py::func", "summary": "WS", "risks": []}]'
+        )
+
+        enricher = GraphEnricher(
+            graph_manager,
+            llm_provider,
+            root_path=tmp_path,
+            content_reader=ContentReader(),
+        )
+
+        # Act - Patch _extract_code_snippet to return empty string
+        with patch.object(enricher, "_extract_code_snippet", return_value=""):
+            await enricher.enrich_nodes(batch_size=10)
+
+        # Assert - Prompt uses fallback
+        _system_prompt, user_prompt = llm_provider.send.call_args[0]
+        assert "- code: (not available)" in user_prompt, (
+            "Empty string from _extract_code_snippet should produce 'not available' fallback"
+        )
+        assert "```" not in user_prompt, (
+            "Empty string should NOT produce a code block"
         )

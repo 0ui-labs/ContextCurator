@@ -3,6 +3,13 @@
 This module provides the GraphEnricher class for enriching code graphs with
 semantic information using LLM providers. It processes code nodes in batches
 for efficient API usage and provides robust error handling.
+
+The enricher supports two modes:
+    - **Metadata-only mode** (default): Sends node names, types, and line
+      numbers to the LLM for analysis.
+    - **Code-content mode**: When ``root_path`` is provided, extracts actual
+      source code from files and includes it in LLM prompts, enabling more
+      accurate semantic summaries and risk assessments.
 """
 
 import asyncio
@@ -34,6 +41,7 @@ class GraphEnricher:
         - Uses asyncio.gather for parallel batch processing
         - Implements batch-level error isolation (one batch failure doesn't affect others)
         - Updates graph nodes with summary and risks attributes
+        - Supports code-content extraction for accurate LLM analysis
 
     The class enriches only nodes with type "function" or "class" that don't
     already have a "summary" attribute, ensuring idempotent behavior.
@@ -41,26 +49,24 @@ class GraphEnricher:
     Attributes:
         _graph_manager: GraphManager instance containing the code graph to enrich.
         _llm_provider: LLMProvider instance for AI-powered semantic analysis.
+        _root_path: Project root for resolving source file paths (None for
+            metadata-only mode).
+        _content_reader: ContentReader for reading source files (auto-created
+            when root_path is set).
+        _max_code_lines: Maximum lines per code snippet before truncation.
 
     Example:
-        Basic usage with GraphManager and LLMProvider::
+        Metadata-only mode (backwards compatible)::
 
-            from codemap.graph import GraphManager
-            from codemap.core.llm import get_provider
-            from codemap.engine.enricher import GraphEnricher
-
-            # Initialize dependencies
-            graph_manager = GraphManager()
-            llm_provider = get_provider("cerebras")
-
-            # Create enricher and process nodes
             enricher = GraphEnricher(graph_manager, llm_provider)
             await enricher.enrich_nodes(batch_size=10)
 
-            # Check enriched attributes
-            for node_id, attrs in graph_manager.graph.nodes(data=True):
-                if attrs.get("type") in ["function", "class"]:
-                    print(f"{node_id}: {attrs.get('summary')}")
+        Code-content mode (includes real source code in prompts)::
+
+            enricher = GraphEnricher(
+                graph_manager, llm_provider, root_path=Path("/my/project")
+            )
+            await enricher.enrich_nodes(batch_size=10)
     """
 
     def __init__(
@@ -129,6 +135,13 @@ class GraphEnricher:
         if "::" not in node_id:
             return None
 
+        if start_line > end_line:
+            logger.warning(
+                f"Invalid line range for code extraction ({node_id}): "
+                f"start_line={start_line} > end_line={end_line}"
+            )
+            return None
+
         file_path = node_id.split("::")[0]
         abs_path = self._root_path / file_path
 
@@ -140,6 +153,13 @@ class GraphEnricher:
 
         lines = content.splitlines()
         snippet_lines = lines[start_line - 1 : end_line]
+
+        if not snippet_lines:
+            logger.warning(
+                f"Empty code snippet for {node_id} "
+                f"(lines {start_line}-{end_line}, file has {len(lines)} lines)"
+            )
+            return None
 
         if len(snippet_lines) > self._max_code_lines:
             original_length = len(snippet_lines)
@@ -246,8 +266,8 @@ class GraphEnricher:
 
             user_prompt_lines = ["Analyze these code elements:", ""]
             for idx, (node_id, attrs) in enumerate(batch, start=1):
-                start_line = attrs.get('start_line')
-                end_line = attrs.get('end_line')
+                start_line = attrs.get("start_line")
+                end_line = attrs.get("end_line")
 
                 user_prompt_lines.append(f"### {idx}. {node_id}")
                 user_prompt_lines.append(f"- type: {attrs.get('type')}")
@@ -258,7 +278,7 @@ class GraphEnricher:
                     code = None
                     if start_line is not None and end_line is not None:
                         code = self._extract_code_snippet(node_id, start_line, end_line)
-                    if code is not None:
+                    if code:
                         file_path_part = node_id.split("::")[0] if "::" in node_id else node_id
                         ext = Path(file_path_part).suffix.lstrip(".")
                         lang_map = {"py": "python", "js": "javascript", "ts": "typescript"}
@@ -273,8 +293,7 @@ class GraphEnricher:
                 user_prompt_lines.append("")
 
             user_prompt_lines.append(
-                'Return JSON array: '
-                '[{"node_id": "...", "summary": "...", "risks": ["..."]}]'
+                'Return JSON array: [{"node_id": "...", "summary": "...", "risks": ["..."]}]'
             )
             user_prompt = "\n".join(user_prompt_lines)
 
