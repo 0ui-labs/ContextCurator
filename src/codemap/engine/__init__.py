@@ -2,8 +2,10 @@
 
 from codemap.engine.builder import MapBuilder
 from codemap.engine.enricher import GraphEnricher
+from codemap.engine.hierarchy_enricher import HierarchyEnricher
 
 __all__ = [
     "MapBuilder",
     "GraphEnricher",
+    "HierarchyEnricher",
 ]

@@ -6,6 +6,7 @@ bottom-up (Code -> File -> Package -> Project), using existing code-level
 summaries from GraphEnricher as input to produce higher-level summaries.
 """
 
+import asyncio
 import json
 import logging
 from collections import defaultdict
@@ -35,6 +36,11 @@ class HierarchyEnricher:
         Args:
             graph_manager: GraphManager containing a graph with hierarchy levels.
             llm_provider: LLMProvider for generating aggregated summaries.
+
+        Example:
+            >>> manager = GraphManager()
+            >>> provider = LLMProvider(...)
+            >>> enricher = HierarchyEnricher(manager, provider)
         """
         self._graph_manager = graph_manager
         self._llm_provider = llm_provider
@@ -47,6 +53,12 @@ class HierarchyEnricher:
         collects summaries from CONTAINS children and calls the LLM to
         produce an aggregated summary. Skips parent nodes whose children
         have no summaries.
+
+        Example:
+            >>> enricher = HierarchyEnricher(graph_manager, llm_provider)
+            >>> await enricher.aggregate_summaries()
+            >>> graph_manager.graph.nodes["project::MyProject"]["summary"]
+            'Project overview summary...'
         """
         graph = self._graph_manager.graph
 
@@ -66,8 +78,11 @@ class HierarchyEnricher:
         # (highest level nodes are leaves that already have summaries)
         for level in range(max_level - 1, -1, -1):
             parent_nodes = nodes_by_level.get(level, [])
-            for parent_id in parent_nodes:
-                await self._aggregate_node(parent_id)
+            tasks = [self._aggregate_node(parent_id) for parent_id in parent_nodes]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for parent_id, result in zip(parent_nodes, results):
+                if isinstance(result, Exception):
+                    logger.warning("Unexpected error aggregating %s: %s", parent_id, result)
 
     async def _aggregate_node(self, node_id: str) -> None:
         """Aggregate summaries for a single parent node from its CONTAINS children.
@@ -105,10 +120,7 @@ class HierarchyEnricher:
             'Return JSON: [{"node_id": "...", "summary": "..."}]'
         )
 
-        child_lines = [
-            f"- {child_id}: {summary}"
-            for child_id, summary in children_with_summaries
-        ]
+        child_lines = [f"- {child_id}: {summary}" for child_id, summary in children_with_summaries]
 
         user_prompt = (
             f"Summarize these components of {node_type} '{node_name}':\n\n"
@@ -118,6 +130,11 @@ class HierarchyEnricher:
 
         try:
             response = await self._llm_provider.send(system_prompt, user_prompt)
+        except Exception as e:
+            logger.warning("LLM call failed for %s: %s", node_id, e)
+            return
+
+        try:
             results: list[dict[str, str]] = json.loads(response)
 
             for result in results:

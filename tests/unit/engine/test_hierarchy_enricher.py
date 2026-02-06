@@ -5,6 +5,7 @@ Tests cover:
 - Bottom-up aggregation (Code -> File -> Package -> Project)
 - Level-based processing order
 - Handling of nodes without child summaries
+- Edge cases: empty graph, non-CONTAINS edges, LLM error handling
 """
 
 from pathlib import Path
@@ -54,7 +55,9 @@ def graph_with_hierarchy() -> GraphManager:
     manager.build_hierarchy("TestProject")
 
     # Simulate GraphEnricher output: add summaries to code-level nodes only
-    manager.graph.nodes["src/auth/login.py::authenticate"]["summary"] = "Authenticates user credentials"
+    manager.graph.nodes["src/auth/login.py::authenticate"]["summary"] = (
+        "Authenticates user credentials"
+    )
     manager.graph.nodes["src/auth/login.py::validate_token"]["summary"] = "Validates JWT tokens"
     manager.graph.nodes["src/api/routes.py::UserRouter"]["summary"] = "Handles user-related routes"
     manager.graph.nodes["src/api/routes.py::get_user"]["summary"] = "Retrieves user by ID"
@@ -101,7 +104,9 @@ class TestAggregationBottomUp:
         # Arrange
         provider = AsyncMock(spec=LLMProvider)
         provider.send.return_value = (
-            '[{"node_id": "src/auth/login.py", "summary": "Authentication module providing credential verification and JWT token validation"}]'
+            '[{"node_id": "src/auth/login.py",'
+            ' "summary": "Authentication module providing'
+            ' credential verification and JWT token validation"}]'
         )
         enricher = HierarchyEnricher(graph_with_hierarchy, provider)
 
@@ -116,22 +121,25 @@ class TestAggregationBottomUp:
         self, graph_with_hierarchy: GraphManager
     ) -> None:
         """Package node receives aggregated summary from its file-level children."""
-        # Arrange
+        # Arrange - use a function-based side_effect to return correct node_id
+        # regardless of call order within a level
+        responses: dict[str, str] = {
+            "src/auth/login.py": "Authentication module",
+            "src/api/routes.py": "API routing module",
+            "src/auth": "Auth package",
+            "src/api": "API package",
+            "src": "Source root",
+            "project::TestProject": "Test project",
+        }
+
+        async def dynamic_response(_system: str, user: str) -> str:
+            for node_id, summary in responses.items():
+                if f"node_id: {node_id}" in user:
+                    return f'[{{"node_id": "{node_id}", "summary": "{summary}"}}]'
+            return '[{"node_id": "unknown", "summary": "fallback"}]'
+
         provider = AsyncMock(spec=LLMProvider)
-        provider.send.side_effect = [
-            # Level 3->File: login.py aggregation (code -> file)
-            '[{"node_id": "src/auth/login.py", "summary": "Authentication module"}]',
-            # Level 3->File: routes.py aggregation (code -> file)
-            '[{"node_id": "src/api/routes.py", "summary": "API routing module"}]',
-            # Level 2->Package: auth package aggregation (file -> package)
-            '[{"node_id": "src/auth", "summary": "Auth package handling user authentication and token validation"}]',
-            # Level 2->Package: api package aggregation (file -> package)
-            '[{"node_id": "src/api", "summary": "API package"}]',
-            # Level 1->Package: src package aggregation (package -> package)
-            '[{"node_id": "src", "summary": "Source root"}]',
-            # Level 0->Project: project aggregation (package -> project)
-            '[{"node_id": "project::TestProject", "summary": "Test project"}]',
-        ]
+        provider.send.side_effect = dynamic_response
         enricher = HierarchyEnricher(graph_with_hierarchy, provider)
 
         # Act
@@ -208,8 +216,7 @@ class TestProjectLevelAggregation:
         """Project node receives aggregated summary from top-level package summaries."""
         # Arrange - add summaries to all hierarchy levels below project
         graph_with_hierarchy.graph.nodes["src/auth/login.py"]["summary"] = (
-            "Authentication module providing credential verification"
-            " and JWT token validation"
+            "Authentication module providing credential verification and JWT token validation"
         )
         graph_with_hierarchy.graph.nodes["src/api/routes.py"]["summary"] = (
             "API routing module with user endpoints"
@@ -239,3 +246,114 @@ class TestProjectLevelAggregation:
         project_node = graph_with_hierarchy.graph.nodes["project::TestProject"]
         assert "summary" in project_node
         assert "Code mapping" in project_node["summary"]
+
+
+class TestEdgeCases:
+    """Test suite for edge cases and error handling.
+
+    Validates behavior for empty graphs, non-CONTAINS edges,
+    LLM response errors, and LLM call failures.
+    """
+
+    @pytest.mark.asyncio
+    async def test_handles_llm_send_exception(self, graph_with_hierarchy: GraphManager) -> None:
+        """LLM raising an exception logs warning and skips node without crashing."""
+        # Arrange
+        provider = AsyncMock(spec=LLMProvider)
+        provider.send.side_effect = RuntimeError("LLM service unavailable")
+        enricher = HierarchyEnricher(graph_with_hierarchy, provider)
+
+        # Act - should not raise
+        await enricher.aggregate_summaries()
+
+        # Assert - no nodes should have received summaries
+        assert "summary" not in graph_with_hierarchy.graph.nodes["src/auth/login.py"]
+        assert "summary" not in graph_with_hierarchy.graph.nodes["src/api/routes.py"]
+
+    @pytest.mark.asyncio
+    async def test_empty_graph_without_levels_returns_early(self) -> None:
+        """aggregate_summaries returns immediately when no nodes have levels."""
+        # Arrange
+        manager = GraphManager()
+        provider = AsyncMock(spec=LLMProvider)
+        enricher = HierarchyEnricher(manager, provider)
+
+        # Act
+        await enricher.aggregate_summaries()
+
+        # Assert
+        provider.send.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_ignores_non_contains_edges(self, graph_with_hierarchy: GraphManager) -> None:
+        """Non-CONTAINS edges (e.g. IMPORTS) are ignored during child collection."""
+        # Arrange - add an IMPORTS edge from a file node to another
+        graph_with_hierarchy.graph.add_edge(
+            "src/auth/login.py", "src/api/routes.py", relationship="IMPORTS"
+        )
+
+        provider = AsyncMock(spec=LLMProvider)
+        provider.send.return_value = '[{"node_id": "src/auth/login.py", "summary": "Auth module"}]'
+        enricher = HierarchyEnricher(graph_with_hierarchy, provider)
+
+        # Act
+        await enricher.aggregate_summaries()
+
+        # Assert - file node gets summary from code children only, not IMPORTS targets
+        assert "summary" in graph_with_hierarchy.graph.nodes["src/auth/login.py"]
+
+    @pytest.mark.asyncio
+    async def test_handles_invalid_json_from_llm(self, graph_with_hierarchy: GraphManager) -> None:
+        """LLM returning invalid JSON logs warning and skips node."""
+        # Arrange
+        provider = AsyncMock(spec=LLMProvider)
+        provider.send.return_value = "not valid json {{"
+        enricher = HierarchyEnricher(graph_with_hierarchy, provider)
+
+        # Act - should not raise
+        await enricher.aggregate_summaries()
+
+        # Assert - file nodes should not have summaries (JSON parsing failed)
+        assert "summary" not in graph_with_hierarchy.graph.nodes["src/auth/login.py"]
+
+    @pytest.mark.asyncio
+    async def test_unexpected_exception_in_one_node_does_not_block_siblings(
+        self, graph_with_hierarchy: GraphManager
+    ) -> None:
+        """Unexpected exception in one node does not prevent siblings from completing."""
+        # Arrange - make login.py crash but routes.py succeed
+        original_aggregate = HierarchyEnricher._aggregate_node
+        call_count = 0
+
+        async def failing_aggregate(self_inner: HierarchyEnricher, node_id: str) -> None:
+            nonlocal call_count
+            if node_id == "src/auth/login.py":
+                raise RuntimeError("Unexpected graph corruption")
+            await original_aggregate(self_inner, node_id)
+
+        responses: dict[str, str] = {
+            "src/api/routes.py": "API routing module",
+            "src/auth": "Auth package",
+            "src/api": "API package",
+            "src": "Source root",
+            "project::TestProject": "Test project",
+        }
+
+        async def dynamic_response(_system: str, user: str) -> str:
+            for node_id, summary in responses.items():
+                if f"node_id: {node_id}" in user:
+                    return f'[{{"node_id": "{node_id}", "summary": "{summary}"}}]'
+            return '[{"node_id": "unknown", "summary": "fallback"}]'
+
+        provider = AsyncMock(spec=LLMProvider)
+        provider.send.side_effect = dynamic_response
+        enricher = HierarchyEnricher(graph_with_hierarchy, provider)
+        enricher._aggregate_node = lambda nid: failing_aggregate(enricher, nid)  # type: ignore[assignment]
+
+        # Act - should not raise despite RuntimeError in one node
+        await enricher.aggregate_summaries()
+
+        # Assert - routes.py should still have received its summary
+        assert "summary" in graph_with_hierarchy.graph.nodes["src/api/routes.py"]
+        # login.py should NOT have a summary (its aggregation crashed)
+        assert "summary" not in graph_with_hierarchy.graph.nodes["src/auth/login.py"]

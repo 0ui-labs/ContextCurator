@@ -325,6 +325,12 @@ class GraphManager:
 
         Args:
             name: Project name for display.
+
+        Example:
+            >>> manager = GraphManager()
+            >>> manager.add_project("MyProject")
+            >>> manager.graph.nodes["project::MyProject"]["level"]
+            0
         """
         node_id = f"project::{name}"
         self._graph.add_node(
@@ -345,6 +351,13 @@ class GraphManager:
             package_path: Relative path like 'src/auth'.
             project_id: Optional project node ID for root-level packages.
                 If not provided, searches for an existing project node.
+
+        Example:
+            >>> manager = GraphManager()
+            >>> manager.add_project("MyProject")
+            >>> manager.add_package("src", "project::MyProject")
+            >>> manager.graph.nodes["src"]["level"]
+            1
         """
         parts = Path(package_path).parts
         name = parts[-1] if parts else package_path
@@ -381,6 +394,15 @@ class GraphManager:
 
         Args:
             project_name: Name for the project root node.
+
+        Example:
+            >>> manager = GraphManager()
+            >>> manager.add_file(FileEntry(Path("src/auth/login.py"), 100, 25))
+            >>> manager.build_hierarchy("MyProject")
+            >>> "project::MyProject" in manager.graph.nodes
+            True
+            >>> "src/auth" in manager.graph.nodes
+            True
         """
         project_id = f"project::{project_name}"
         self.add_project(project_name)

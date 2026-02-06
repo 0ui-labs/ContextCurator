@@ -923,3 +923,46 @@ class TestHierarchyBuilding:
 
         code_node = manager.graph.nodes["src/auth/login.py::login"]
         assert code_node["level"] == 4  # file is level 3, code is level 4
+
+    def test_root_level_file_connects_directly_to_project(self) -> None:
+        """File in root directory gets CONTAINS edge from project node."""
+        manager = GraphManager()
+        manager.add_file(FileEntry(Path("main.py"), size=50, token_est=10))
+
+        manager.build_hierarchy("MyProject")
+
+        assert manager.graph.has_edge("project::MyProject", "main.py")
+        edge = manager.graph.edges["project::MyProject", "main.py"]
+        assert edge["relationship"] == "CONTAINS"
+        assert manager.graph.nodes["main.py"]["level"] == 1
+
+    def test_add_package_without_project_node(self) -> None:
+        """add_package() for root-level package without existing project node creates no edge."""
+        manager = GraphManager()
+
+        manager.add_package("src")
+
+        assert "src" in manager.graph.nodes
+        assert manager.graph.nodes["src"]["type"] == "package"
+        # No project node exists, so no CONTAINS edge should be created
+        assert manager.graph.in_degree("src") == 0
+
+    def test_deep_nesting_hierarchy(self) -> None:
+        """build_hierarchy() handles deeply nested paths (>5 levels) correctly."""
+        manager = GraphManager()
+        manager.add_file(FileEntry(Path("a/b/c/d/e/f/deep.py"), size=50, token_est=10))
+
+        manager.build_hierarchy("DeepProject")
+
+        # Verify all intermediate packages were created
+        assert "a" in manager.graph.nodes
+        assert "a/b" in manager.graph.nodes
+        assert "a/b/c" in manager.graph.nodes
+        assert "a/b/c/d" in manager.graph.nodes
+        assert "a/b/c/d/e" in manager.graph.nodes
+        assert "a/b/c/d/e/f" in manager.graph.nodes
+
+        # Verify levels
+        assert manager.graph.nodes["a"]["level"] == 1
+        assert manager.graph.nodes["a/b/c/d/e/f"]["level"] == 6
+        assert manager.graph.nodes["a/b/c/d/e/f/deep.py"]["level"] == 7
