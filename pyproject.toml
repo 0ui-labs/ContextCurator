@@ -19,7 +19,12 @@ classifiers = [
 ]
 dependencies = [
     "networkx>=3.0",
+    "typer>=0.12.0",
+    "filelock>=3.13.0",
 ]
+
+[project.scripts]
+curator = "codemap.cli.main:app"
 
 [project.optional-dependencies]
 # Install dev dependencies via: pip install -r requirements-dev.txt
@@ -85,7 +90,18 @@ target-version = "py311"
 fix = true
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "N", "W"]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "W",   # pycodestyle warnings
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "SIM", # flake8-simplify
+    "TCH", # flake8-type-checking
+]
 ignore = []
 
 [tool.ruff.format]

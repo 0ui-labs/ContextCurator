@@ -1,0 +1,422 @@
+Arbeitsauftrag: Phase 21 - Plan-Analyzer Agent (Überarbeitet)                                                                                                                                                                                                                                                                                                                                                                                                        
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
+  Vision                                                                                                                                                                                                                                                                                                                                                                                                                                                               
+   
+  Der Curator Agent ist wie ein Bauleiter, der vor der Ausführung eines Plans in seinen Bauplan nachschlägt. Er navigiert durch ein hierarchisches Verzeichnis der Codebase - wie Google Maps - und zoomt bei Bedarf tiefer hinein, um Risiken zu verstehen und den Plan entsprechend anzupassen.                                                                                                                                                                      
+                                                          
+  Kernprinzip: Rein semantische Analyse. Der Agent liest, versteht und entscheidet - wie ein Mensch, der ein Verzeichnis durchblättert.
+
+  ---
+  Voraussetzungen
+
+  - ✅ Phase 17/18: Graph mit Summaries, Risks, Touches auf allen Ebenen
+  - ✅ Hierarchische Struktur: Level 0-4 bereits im Graph vorhanden
+  - Der Graph enthält bereits die "Intelligenz" (LLM-generierte Beschreibungen)
+
+  ---
+  Das Zoom-Level Verzeichnis
+
+  Level 0 - Projektübersicht
+
+  # {Projektname}
+
+  {1-2 Sätze: Was macht dieses Projekt?}
+
+  ## Hauptbereiche:
+  - **{package_1}/** - {summary}
+  - **{package_2}/** - {summary}
+  - ...
+
+  ## Architektur-Hinweise:
+  - {Kritische Verbindungen zwischen Packages}
+  - {Zentrale Module die viel importiert werden}
+
+  Level 1 - Package-Ebene
+
+  # {package_path}/
+
+  {Summary: Was macht dieses Package?}
+
+  ## Module:
+  - **{modul_1}.py** - {summary}
+  - **{modul_2}.py** - {summary}
+  - ...
+
+  ## Interne Struktur:
+  - {Welche Module hängen voneinander ab}
+
+  ## Externe Schnittstellen:
+  - Wird importiert von: {Liste der importierenden Packages}
+  - Importiert: {Liste der genutzten Packages}
+
+  ## Risiken:
+  - {Aus Phase 17 enrichment}
+
+  Level 2 - Modul-Ebene
+
+  # {file_path}
+
+  {Summary: Was macht dieses Modul?}
+
+  ## Enthält:
+  - **{class_1}** - {summary}
+  - **{function_1}()** - {summary}
+  - ...
+
+  ## Abhängigkeiten:
+  - Importiert: {Liste}
+  - Wird importiert von: {Liste mit Anzahl}
+
+  ## Side-Effects:
+  - {touches: database/api/filesystem/...}
+
+  ## Risiken:
+  - {Aus Phase 17 enrichment}
+
+  Level 3 - Symbol-Ebene (Klasse/Funktion)
+
+  # {file_path}::{symbol_name}
+
+  {Summary: Was macht diese Funktion/Klasse?}
+
+  ## Signatur:
+  {Funktionssignatur oder Klassendefinition}
+
+  ## Verhalten:
+  - {Was tut sie genau}
+  - {Welche Side-Effects}
+
+  ## Aufrufer:
+  - {Wer ruft diese Funktion auf}
+  - {In welchem Kontext}
+
+  ## Risiken:
+  - {Spezifische Risiken bei Änderung}
+
+  Level 4 - Code-Detail
+
+  # {file_path}::{symbol_name} - Quellcode
+
+  ```{language}
+  {Der tatsächliche Quellcode}
+
+  Zeilen {start_line}-{end_line}
+
+  ---
+
+  ## Komponenten
+
+  ### 1. MapRenderer (`src/codemap/engine/map_renderer.py`)
+
+  **Aufgabe:** Rendert den Graph als lesbares Verzeichnis für ein bestimmtes Zoom-Level.
+
+  ```python
+  class MapRenderer:
+      """Rendert den Code-Graph als lesbares hierarchisches Verzeichnis."""
+
+      def __init__(self, graph_manager: GraphManager) -> None:
+          self._graph = graph_manager
+
+      def render(self, path: str, level: int) -> str:
+          """
+          Rendert das Verzeichnis für einen Pfad auf einem Zoom-Level.
+
+          Args:
+              path: Der Pfad zum Rendern (z.B. "src/auth" oder "src/auth/session.py")
+              level: Zoom-Level 0-4
+
+          Returns:
+              Markdown-formatiertes Verzeichnis, lesbar für den Curator Agent.
+          """
+
+      def render_overview(self) -> str:
+          """Rendert Level 0 - die komplette Projektübersicht."""
+
+      def render_package(self, package_path: str) -> str:
+          """Rendert Level 1 - ein Package mit seinen Modulen."""
+
+      def render_module(self, file_path: str) -> str:
+          """Rendert Level 2 - ein Modul mit seinen Symbolen."""
+
+      def render_symbol(self, file_path: str, symbol_name: str) -> str:
+          """Rendert Level 3 - eine Funktion/Klasse mit Details."""
+
+      def render_code(self, file_path: str, symbol_name: str) -> str:
+          """Rendert Level 4 - den tatsächlichen Quellcode."""
+
+  Wichtig: Der Output ist für einen LLM-Agent optimiert - klar strukturiert, mit allen relevanten Informationen, aber nicht überladen.
+
+  ---
+  2. CuratorTools (src/codemap/engine/curator_tools.py)
+
+  Aufgabe: Stellt die "Nachschlage"-Tools für den Curator Agent bereit.
+
+  class CuratorTools:
+      """Tools für den Curator Agent zum Navigieren im Code-Verzeichnis."""
+
+      def __init__(self, map_renderer: MapRenderer) -> None:
+          self._renderer = map_renderer
+
+      def get_project_overview(self) -> str:
+          """
+          Zeigt die Projektübersicht (Level 0).
+
+          Nutze dies als Einstiegspunkt um zu verstehen,
+          wie das Projekt strukturiert ist.
+          """
+          return self._renderer.render_overview()
+
+      def zoom_to_package(self, package_path: str) -> str:
+          """
+          Zoomt in ein Package hinein (Level 1).
+
+          Args:
+              package_path: z.B. "src/auth" oder "src/engine"
+
+          Zeigt alle Module im Package und ihre Beziehungen.
+          """
+          return self._renderer.render_package(package_path)
+
+      def zoom_to_module(self, file_path: str) -> str:
+          """
+          Zoomt in ein Modul hinein (Level 2).
+
+          Args:
+              file_path: z.B. "src/auth/session.py"
+
+          Zeigt alle Funktionen/Klassen und wer dieses Modul importiert.
+          """
+          return self._renderer.render_module(file_path)
+
+      def zoom_to_symbol(self, file_path: str, symbol_name: str) -> str:
+          """
+          Zoomt in eine Funktion oder Klasse hinein (Level 3).
+
+          Args:
+              file_path: z.B. "src/auth/session.py"
+              symbol_name: z.B. "SessionManager" oder "validate_token"
+
+          Zeigt Details zur Funktion und wer sie aufruft.
+          """
+          return self._renderer.render_symbol(file_path, symbol_name)
+
+      def show_code(self, file_path: str, symbol_name: str) -> str:
+          """
+          Zeigt den tatsächlichen Quellcode (Level 4).
+
+          Args:
+              file_path: z.B. "src/auth/session.py"
+              symbol_name: z.B. "validate_token"
+
+          Nutze dies nur wenn du den genauen Code sehen musst.
+          """
+          return self._renderer.render_code(file_path, symbol_name)
+
+  ---
+  3. CuratorAgent (src/codemap/engine/curator_agent.py)
+
+  Aufgabe: Der LLM-Agent, der Pläne analysiert und überarbeitet.
+
+  class CuratorAgent:
+      """
+      Der Curator Agent - analysiert Pläne semantisch gegen die Codebase.
+
+      Arbeitet wie ein Bauleiter: Schlägt im Verzeichnis nach,
+      versteht die Zusammenhänge, passt den Plan an.
+      """
+
+      SYSTEM_PROMPT = '''
+  Du bist der Curator Agent für eine Codebase. Deine Aufgabe:
+
+  1. Du erhältst einen Implementierungsplan von einem Coding Agent
+  2. Du hast Zugriff auf ein hierarchisches Verzeichnis der Codebase
+  3. Du analysierst den Plan und schlägst bei Bedarf nach
+  4. Du gibst einen ÜBERARBEITETEN Plan zurück
+
+  ## Deine Tools
+
+  - get_project_overview() - Starte hier für den Gesamtüberblick
+  - zoom_to_package(path) - Zoome in ein Package
+  - zoom_to_module(path) - Zoome in eine Datei
+  - zoom_to_symbol(path, name) - Zoome in eine Funktion/Klasse
+  - show_code(path, name) - Zeige den echten Code (nur wenn nötig)
+
+  ## Deine Arbeitsweise
+
+  1. Lies den Plan und identifiziere betroffene Dateien
+  2. Schlage im Verzeichnis nach:
+     - Wer importiert diese Dateien?
+     - Welche Side-Effects haben sie?
+     - Was könnte bei Änderung brechen?
+  3. Wenn du Risiken findest, passe den Plan an:
+     - Füge vorbereitende Schritte ein
+     - Ändere die Reihenfolge
+     - Ergänze Absicherungen
+  4. Gib den überarbeiteten Plan zurück
+
+  ## Wichtig
+
+  - Du gibst KEINE Warnungen oder Kommentare
+  - Du gibst einen FERTIGEN Plan zurück
+  - Der Coding Agent soll nicht abwägen müssen
+  - Der Plan muss sofort umsetzbar sein
+
+  ## Beispiel
+
+  Wenn der Plan sagt "lösche auth/legacy.py" und du siehst, dass
+  3 Dateien das noch importieren, dann ändere den Plan zu:
+  1. Imports in X, Y, Z auf neue Lösung umstellen
+  2. Dann auth/legacy.py löschen
+
+  Nicht: "Warnung: 3 Dateien importieren das noch"
+  '''
+
+      def __init__(
+          self,
+          llm_provider: LLMProvider,
+          curator_tools: CuratorTools,
+      ) -> None:
+          self._llm = llm_provider
+          self._tools = curator_tools
+
+      async def analyze_plan(self, plan: str) -> str:
+          """
+          Analysiert einen Plan und gibt einen überarbeiteten Plan zurück.
+
+          Args:
+              plan: Der ursprüngliche Implementierungsplan (Markdown)
+
+          Returns:
+              Der überarbeitete, sichere Plan (Markdown)
+          """
+
+  ---
+  4. PlanCurator (src/codemap/engine/plan_curator.py)
+
+  Aufgabe: Einfache Orchestrierung - nimmt Plan rein, gibt überarbeiteten Plan raus.
+
+  class PlanCurator:
+      """
+      Hauptschnittstelle für Plan-Analyse.
+
+      Orchestriert MapRenderer, CuratorTools und CuratorAgent.
+      """
+
+      def __init__(
+          self,
+          graph_manager: GraphManager,
+          llm_provider: LLMProvider,
+      ) -> None:
+          self._renderer = MapRenderer(graph_manager)
+          self._tools = CuratorTools(self._renderer)
+          self._agent = CuratorAgent(llm_provider, self._tools)
+
+      async def curate(self, plan: str) -> str:
+          """
+          Analysiert und überarbeitet einen Implementierungsplan.
+
+          Args:
+              plan: Ursprünglicher Plan vom Coding Agent
+
+          Returns:
+              Überarbeiteter, sicherer Plan
+          """
+          return await self._agent.analyze_plan(plan)
+
+  ---
+  Implementierungsreihenfolge (TDD)
+
+  Teil 1: MapRenderer (Basis)
+
+  1. RED: Tests für render_overview() - Projektübersicht korrekt formatiert
+  2. RED: Tests für render_package() - Package mit Modulen
+  3. RED: Tests für render_module() - Modul mit Symbolen und Imports
+  4. RED: Tests für render_symbol() - Symbol mit Aufrufern
+  5. RED: Tests für render_code() - Quellcode-Extraktion
+  6. GREEN: Implementierung
+  7. REFACTOR: Template-Struktur optimieren
+
+  Teil 2: CuratorTools (Navigation)
+
+  1. RED: Tests dass Tools den Renderer korrekt aufrufen
+  2. RED: Tests für Fehlerbehandlung (Pfad existiert nicht)
+  3. GREEN: Implementierung
+  4. REFACTOR: Docstrings für LLM-Verständlichkeit optimieren
+
+  Teil 3: CuratorAgent (Kern)
+
+  1. RED: Tests mit Mock-LLM - einfacher Plan ohne Risiken
+  2. RED: Tests - Plan mit einer riskanten Datei
+  3. RED: Tests - Plan mit Löschung und Abhängigen
+  4. RED: Tests - Agent nutzt Tools in richtiger Reihenfolge
+  5. GREEN: Implementierung mit Tool-Calling
+  6. REFACTOR: System-Prompt optimieren
+
+  Teil 4: PlanCurator (Integration)
+
+  1. RED: End-to-End Test mit echtem Graph
+  2. GREEN: Orchestrierung implementieren
+  3. REFACTOR: Error-Handling
+
+  ---
+  Akzeptanzkriterien
+
+  - MapRenderer rendert alle 5 Zoom-Level korrekt als lesbares Markdown
+  - CuratorTools ermöglicht Navigation durch das Verzeichnis
+  - CuratorAgent nutzt Tools um Plan zu analysieren
+  - Output ist ein überarbeiteter Plan, keine Warnungen
+  - Der Plan ist sofort umsetzbar ohne weitere Entscheidungen
+  - 100% Test-Coverage für neue Module
+  - mypy --strict ohne Fehler
+  - Export via src/codemap/engine/__init__.py
+
+  ---
+  Beispiel End-to-End
+
+  Input - Plan vom Coding Agent:
+  ## Plan: Auth-System aufräumen
+
+  1. `src/auth/session.py` refaktorieren - neue Session-Logik
+  2. `src/auth/legacy.py` löschen - wird nicht mehr gebraucht
+  3. Tests anpassen
+
+  Curator Agent schlägt nach:
+  → get_project_overview()
+    "auth/ ist zentral, wird von api/ und middleware/ importiert"
+
+  → zoom_to_module("src/auth/session.py")
+    "Wird von 15 Dateien importiert, hat Redis Side-Effects"
+
+  → zoom_to_module("src/auth/legacy.py")
+    "Wird importiert von: login.py, api/auth.py, middleware.py"
+
+  Output - Überarbeiteter Plan:
+  ## Plan: Auth-System aufräumen
+
+  1. **Vorbereitung:** Imports umstellen
+     - `src/auth/login.py`: Import von `legacy` auf `session` ändern
+     - `src/api/auth.py`: Import von `legacy` auf `session` ändern
+     - `src/middleware.py`: Import von `legacy` auf `session` ändern
+
+  2. `src/auth/session.py` refaktorieren
+     - Neue Session-Logik implementieren
+     - Alte Funktionssignaturen als Wrapper beibehalten (für Kompatibilität)
+
+  3. `src/auth/legacy.py` löschen
+     - Jetzt sicher, da keine Imports mehr
+
+  4. Tests anpassen
+     - Tests für neue Session-Logik
+     - Alte Legacy-Tests entfernen
+
+  5. **Cleanup (optional, späterer PR):**
+     - Deprecated-Wrapper in session.py entfernen
+     - Direkte Aufrufe der neuen API
+
+  ---
+  Technische Notizen
+
+  - Kein Vector-Search: Alles rein semantisch via LLM-Textverständnis
+  - Kein programmatisches Traversieren: Der Agent navigiert selbst durch Lesen
+  - Graph = Datenquelle: Die Node-Attribute (summary, risks, touches) werden zu lesbarem Text gerendert
+  - Tool-Calling: Standard LLM Tool-Use Pattern (OpenAI/Anthropic compatible)

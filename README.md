@@ -18,6 +18,110 @@ Codemap is a greenfield Python project demonstrating best practices for Test-Dri
 - 🎨 **Code Quality:** ruff for linting and formatting
 - 📦 **Modern Layout:** src-based package structure for better test isolation
 
+## CLI Usage
+
+### Installation
+
+```bash
+pip install -e .
+```
+
+### Commands
+
+#### Initialize Code Map
+
+```bash
+curator init [PATH]
+```
+
+Creates `.codemap/` directory with code dependency graph.
+
+**Options:**
+- `PATH`: Project root directory (default: current directory)
+
+**Example:**
+```bash
+curator init .
+```
+
+#### Update Code Map
+
+```bash
+curator update [--quiet]
+```
+
+Incrementally updates the code map with recent changes.
+
+**Options:**
+- `--quiet, -q`: Suppress output on success
+
+**Example:**
+```bash
+curator update
+curator update --quiet  # For git hooks
+```
+
+#### Show Status
+
+```bash
+curator status
+```
+
+Displays code map statistics and metadata.
+
+**Example:**
+```bash
+curator status
+```
+
+#### Install Git Hook
+
+```bash
+curator install-hook
+```
+
+Installs post-commit hook for automatic updates.
+
+**Example:**
+```bash
+curator install-hook
+```
+
+#### Uninstall Git Hook
+
+```bash
+curator uninstall-hook
+```
+
+Removes curator post-commit hook.
+
+**Example:**
+```bash
+curator uninstall-hook
+```
+
+### Workflow
+
+```bash
+# 1. Initialize code map
+curator init .
+
+# 2. Install git hook for auto-updates
+curator install-hook
+
+# 3. Make changes and commit
+git add .
+git commit -m "Add new feature"
+# Hook automatically runs: curator update --quiet &
+
+# 4. Check status
+curator status
+```
+
+### Troubleshooting
+
+For common issues and solutions, see [CLI Troubleshooting](docs/cli.md#troubleshooting).
+
 ## Installation
 
 **Prerequisites:**
