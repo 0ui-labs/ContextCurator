@@ -8,6 +8,7 @@ for efficient API usage and provides robust error handling.
 import asyncio
 import logging
 import re
+from pathlib import Path
 from typing import Any
 
 import openai
@@ -15,6 +16,7 @@ import orjson
 
 from codemap.core.llm import LLMProvider
 from codemap.graph import GraphManager
+from codemap.mapper.reader import ContentReader, ContentReadError
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +63,15 @@ class GraphEnricher:
                     print(f"{node_id}: {attrs.get('summary')}")
     """
 
-    def __init__(self, graph_manager: GraphManager, llm_provider: LLMProvider) -> None:
+    def __init__(
+        self,
+        graph_manager: GraphManager,
+        llm_provider: LLMProvider,
+        *,
+        root_path: Path | None = None,
+        content_reader: ContentReader | None = None,
+        max_code_lines: int = 100,
+    ) -> None:
         """Initialize GraphEnricher with dependencies.
 
         Follows the Dependency Injection pattern to enable testability and
@@ -70,6 +80,11 @@ class GraphEnricher:
         Args:
             graph_manager: GraphManager instance containing the code graph to enrich.
             llm_provider: LLMProvider instance for AI-powered semantic analysis.
+            root_path: Project root for code extraction. When None, enricher
+                operates in metadata-only mode (backwards compatible).
+            content_reader: File reader for source code. Auto-created when
+                root_path is given but content_reader is None.
+            max_code_lines: Maximum lines per code snippet before truncation.
 
         Example:
             >>> from codemap.graph import GraphManager
@@ -77,9 +92,62 @@ class GraphEnricher:
             >>> manager = GraphManager()
             >>> provider = MockProvider()
             >>> enricher = GraphEnricher(manager, provider)
+
+            With code content::
+
+                enricher = GraphEnricher(manager, provider, root_path=Path("."))
         """
         self._graph_manager = graph_manager
         self._llm_provider = llm_provider
+        self._root_path = root_path
+        self._max_code_lines = max_code_lines
+
+        if root_path is not None and content_reader is None:
+            self._content_reader: ContentReader | None = ContentReader()
+        else:
+            self._content_reader = content_reader
+
+    def _extract_code_snippet(self, node_id: str, start_line: int, end_line: int) -> str | None:
+        """Extract code snippet from source file for a given node.
+
+        Parses the node_id to determine the file path, reads the file,
+        and extracts the relevant line range. Truncates if exceeding
+        max_code_lines.
+
+        Args:
+            node_id: Node identifier in format "path/file.py::symbol_name".
+            start_line: Start line number (1-indexed).
+            end_line: End line number (1-indexed, inclusive).
+
+        Returns:
+            The extracted code snippet as a string, or None if extraction
+            fails (missing file, read error, or node_id without '::').
+        """
+        if self._root_path is None or self._content_reader is None:
+            return None
+
+        if "::" not in node_id:
+            return None
+
+        file_path = node_id.split("::")[0]
+        abs_path = self._root_path / file_path
+
+        try:
+            content = self._content_reader.read_file(abs_path)
+        except (FileNotFoundError, ContentReadError) as e:
+            logger.warning(f"Could not read file for code extraction ({file_path}): {e}")
+            return None
+
+        lines = content.splitlines()
+        snippet_lines = lines[start_line - 1 : end_line]
+
+        if len(snippet_lines) > self._max_code_lines:
+            original_length = len(snippet_lines)
+            snippet_lines = snippet_lines[: self._max_code_lines]
+            remaining = original_length - len(snippet_lines)
+            snippet_lines.append(f"... (truncated, {remaining} more lines)")
+
+        return "\n".join(snippet_lines)
 
     async def enrich_nodes(self, batch_size: int = 10) -> None:
         """Enrich code nodes with semantic information in batches.
@@ -176,16 +244,34 @@ class GraphEnricher:
                 "and return a JSON array with summary and risks for each."
             )
 
-            user_prompt_lines = ["Analyze these code elements:"]
+            user_prompt_lines = ["Analyze these code elements:", ""]
             for idx, (node_id, attrs) in enumerate(batch, start=1):
                 start_line = attrs.get('start_line')
                 end_line = attrs.get('end_line')
-                user_prompt_lines.append(
-                    f"{idx}. node_id: {node_id}, type: {attrs.get('type')}, "
-                    f"name: {attrs.get('name')}, lines: {start_line}-{end_line}"
-                )
 
-            user_prompt_lines.append("")
+                user_prompt_lines.append(f"### {idx}. {node_id}")
+                user_prompt_lines.append(f"- type: {attrs.get('type')}")
+                user_prompt_lines.append(f"- name: {attrs.get('name')}")
+                user_prompt_lines.append(f"- lines: {start_line}-{end_line}")
+
+                if self._root_path is not None:
+                    code = None
+                    if start_line is not None and end_line is not None:
+                        code = self._extract_code_snippet(node_id, start_line, end_line)
+                    if code is not None:
+                        file_path_part = node_id.split("::")[0] if "::" in node_id else node_id
+                        ext = Path(file_path_part).suffix.lstrip(".")
+                        lang_map = {"py": "python", "js": "javascript", "ts": "typescript"}
+                        lang = lang_map.get(ext, ext)
+                        user_prompt_lines.append("- code:")
+                        user_prompt_lines.append(f"```{lang}")
+                        user_prompt_lines.append(code)
+                        user_prompt_lines.append("```")
+                    else:
+                        user_prompt_lines.append("- code: (not available)")
+
+                user_prompt_lines.append("")
+
             user_prompt_lines.append(
                 'Return JSON array: '
                 '[{"node_id": "...", "summary": "...", "risks": ["..."]}]'

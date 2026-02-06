@@ -834,7 +834,6 @@ class TestEnrichNodesIntegration:
         from the graph, simulating realistic LLM behavior.
         """
         # Arrange - Create temporary Python files with realistic code
-        from pathlib import Path
 
         # Create module with functions and classes
         utils_content = '''def calculate_sum(a, b):
@@ -1160,11 +1159,11 @@ class TestEnricherCodeContent:
         assert "def long_function():" in user_prompt, (
             "First line of function should be included"
         )
-        assert "x_50 = 50" in user_prompt, (
-            "Line 50 should be the last included code line"
+        assert "x_49 = 49" in user_prompt, (
+            "Line 49 should be the last included code line (50th line counting def)"
         )
-        assert "x_51 = 51" not in user_prompt, (
-            "Line 51 should NOT be included (truncated)"
+        assert "x_50 = 50" not in user_prompt, (
+            "Line 50 should NOT be included (truncated at max_code_lines=50)"
         )
 
     @pytest.mark.asyncio
@@ -1340,4 +1339,65 @@ class TestEnricherCodeContent:
         _system_prompt, user_prompt = llm_provider.send.call_args[0]
         assert "not available" in user_prompt.lower(), (
             "Node without '::' should have 'not available' code fallback"
+        )
+
+    @pytest.mark.asyncio
+    async def test_truncation_keeps_exactly_max_code_lines(self, tmp_path) -> None:
+        """Truncation produces exactly max_code_lines code lines, not one more.
+
+        Given a snippet of 10 lines and max_code_lines=5, _extract_code_snippet
+        must return exactly 5 code lines plus the truncation indicator. This
+        verifies that the slice uses `[:max_code_lines]` (not `[:max_code_lines + 1]`)
+        and that `remaining` equals original_length - max_code_lines.
+        """
+        from pathlib import Path
+
+        from codemap.mapper.reader import ContentReader
+
+        # Arrange - Create a file with exactly 10 numbered lines
+        file_lines = [f"line_{i}" for i in range(1, 11)]
+        source_file = tmp_path / "ten_lines.py"
+        source_file.write_text("\n".join(file_lines) + "\n")
+
+        graph_manager = GraphManager()
+        graph_manager.add_file(FileEntry(Path("ten_lines.py"), size=200, token_est=50))
+        graph_manager.add_node(
+            "ten_lines.py",
+            CodeNode(type="function", name="func", start_line=1, end_line=10),
+        )
+
+        llm_provider = AsyncMock()
+        llm_provider.send.return_value = (
+            '[{"node_id": "ten_lines.py::func", "summary": "Func", "risks": []}]'
+        )
+
+        # Act - Use max_code_lines=5
+        enricher = GraphEnricher(
+            graph_manager,
+            llm_provider,
+            root_path=tmp_path,
+            content_reader=ContentReader(),
+            max_code_lines=5,
+        )
+
+        # Call _extract_code_snippet directly to verify line count precisely
+        snippet = enricher._extract_code_snippet("ten_lines.py::func", 1, 10)
+        assert snippet is not None
+
+        snippet_lines = snippet.split("\n")
+        # Must be exactly 6 lines: 5 code lines + 1 truncation indicator
+        assert len(snippet_lines) == 6, (
+            f"Expected 6 lines (5 code + 1 truncation), got {len(snippet_lines)}: {snippet_lines}"
+        )
+        # Last line must be the truncation indicator
+        assert "5 more lines" in snippet_lines[-1], (
+            f"Truncation should show '5 more lines' (10 - 5), got: {snippet_lines[-1]}"
+        )
+        # Line 5 (5th code line) must be the last code line
+        assert snippet_lines[4] == "line_5", (
+            f"5th code line should be 'line_5', got: {snippet_lines[4]}"
+        )
+        # Line 6 must NOT appear in the code lines
+        assert "line_6" not in snippet, (
+            "line_6 should NOT appear in truncated snippet (exceeds max_code_lines=5)"
         )
