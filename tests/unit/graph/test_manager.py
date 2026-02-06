@@ -838,7 +838,7 @@ class TestHierarchyBuilding:
         assert "src/auth" in manager.graph.nodes
         node = manager.graph.nodes["src/auth"]
         assert node["type"] == "package"
-        assert node["level"] == 1
+        assert node["level"] == 2
         assert node["name"] == "auth"
 
     def test_add_package_creates_contains_edge_to_project(self) -> None:
@@ -865,7 +865,7 @@ class TestHierarchyBuilding:
         assert edge["relationship"] == "CONTAINS"
 
     def test_add_package_calculates_correct_level(self) -> None:
-        """All packages get level 1 regardless of nesting depth."""
+        """Package level equals directory depth (len of path parts)."""
         manager = GraphManager()
         manager.add_project("MyProject")
         manager.add_package("src")
@@ -873,8 +873,8 @@ class TestHierarchyBuilding:
         manager.add_package("src/auth/oauth")
 
         assert manager.graph.nodes["src"]["level"] == 1
-        assert manager.graph.nodes["src/auth"]["level"] == 1
-        assert manager.graph.nodes["src/auth/oauth"]["level"] == 1
+        assert manager.graph.nodes["src/auth"]["level"] == 2
+        assert manager.graph.nodes["src/auth/oauth"]["level"] == 3
 
     def test_build_hierarchy_creates_packages_from_files(self) -> None:
         """build_hierarchy() infers packages from existing file nodes."""
@@ -891,11 +891,11 @@ class TestHierarchyBuilding:
         assert "src/auth" in manager.graph.nodes
         assert "src/api" in manager.graph.nodes
 
-        # Verify level attributes (0=project, 1=package)
+        # Verify level attributes (0=project, depth-based for packages)
         assert manager.graph.nodes["project::MyProject"]["level"] == 0
         assert manager.graph.nodes["src"]["level"] == 1
-        assert manager.graph.nodes["src/auth"]["level"] == 1
-        assert manager.graph.nodes["src/api"]["level"] == 1
+        assert manager.graph.nodes["src/auth"]["level"] == 2
+        assert manager.graph.nodes["src/api"]["level"] == 2
 
         # Verify hierarchy edges
         assert manager.graph.has_edge("project::MyProject", "src")
@@ -904,14 +904,14 @@ class TestHierarchyBuilding:
         assert manager.graph.has_edge("src/auth", "src/auth/login.py")
 
     def test_file_nodes_get_level_attribute(self) -> None:
-        """File nodes receive level attribute based on depth."""
+        """File nodes receive level attribute based on path depth."""
         manager = GraphManager()
         manager.add_file(FileEntry(Path("src/auth/login.py"), 100, 25))
 
         manager.build_hierarchy("MyProject")
 
         file_node = manager.graph.nodes["src/auth/login.py"]
-        assert file_node["level"] == 2  # file = level 2
+        assert file_node["level"] == 3  # src(1)/auth(2)/login.py(3)
 
     def test_code_nodes_get_level_attribute(self) -> None:
         """Code nodes (function/class) receive level = file_level + 1."""
@@ -922,4 +922,4 @@ class TestHierarchyBuilding:
         manager.build_hierarchy("MyProject")
 
         code_node = manager.graph.nodes["src/auth/login.py::login"]
-        assert code_node["level"] == 3  # function/class = level 3
+        assert code_node["level"] == 4  # file is level 3, code is level 4

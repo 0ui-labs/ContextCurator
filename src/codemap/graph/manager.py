@@ -317,6 +317,107 @@ class GraphManager:
 
         return node_id
 
+    def add_project(self, name: str) -> None:
+        """Add a project root node (level 0) to the graph.
+
+        Creates a node with ID format 'project::{name}' and attributes
+        type='project', level=0, name=name.
+
+        Args:
+            name: Project name for display.
+        """
+        node_id = f"project::{name}"
+        self._graph.add_node(
+            node_id,
+            type="project",
+            level=0,
+            name=name,
+        )
+
+    def add_package(self, package_path: str, project_id: str | None = None) -> None:
+        """Add a package node with correct level and parent CONTAINS edge.
+
+        Creates a node with type='package', level=len(path.parts), and name
+        set to the last path segment. Automatically connects to parent package
+        or project node via CONTAINS edge.
+
+        Args:
+            package_path: Relative path like 'src/auth'.
+            project_id: Optional project node ID for root-level packages.
+                If not provided, searches for an existing project node.
+        """
+        parts = Path(package_path).parts
+        name = parts[-1] if parts else package_path
+
+        self._graph.add_node(
+            package_path,
+            type="package",
+            level=len(parts),
+            name=name,
+        )
+
+        # Connect to parent
+        if len(parts) > 1:
+            parent_path = str(Path(*parts[:-1]))
+            if parent_path in self._graph.nodes:
+                self._graph.add_edge(parent_path, package_path, relationship="CONTAINS")
+        else:
+            # Root-level package: connect to project node
+            if project_id is None:
+                # Find existing project node
+                for node_id, attrs in self._graph.nodes(data=True):
+                    if attrs.get("type") == "project":
+                        project_id = node_id
+                        break
+            if project_id:
+                self._graph.add_edge(project_id, package_path, relationship="CONTAINS")
+
+    def build_hierarchy(self, project_name: str) -> None:
+        """Build hierarchical structure from existing file nodes.
+
+        Creates project and package nodes, sets level attributes on all nodes,
+        and establishes CONTAINS edges forming the hierarchy:
+        project -> package -> file -> code.
+
+        Args:
+            project_name: Name for the project root node.
+        """
+        project_id = f"project::{project_name}"
+        self.add_project(project_name)
+
+        # Collect all unique directory paths from file nodes
+        directories: set[str] = set()
+        for node_id, attrs in self._graph.nodes(data=True):
+            if attrs.get("type") == "file":
+                path = Path(node_id)
+                for i in range(1, len(path.parts)):
+                    directories.add(str(Path(*path.parts[:i])))
+
+        # Create package nodes sorted by depth for proper parent creation
+        for dir_path in sorted(directories, key=lambda p: len(Path(p).parts)):
+            self.add_package(dir_path, project_id)
+
+        # Set level on file nodes and connect to parent package
+        file_nodes = [nid for nid, a in self._graph.nodes(data=True) if a.get("type") == "file"]
+        for node_id in file_nodes:
+            path = Path(node_id)
+            self._graph.nodes[node_id]["level"] = len(path.parts)
+
+            if len(path.parts) > 1:
+                parent_dir = str(Path(*path.parts[:-1]))
+                if parent_dir in self._graph.nodes:
+                    self._graph.add_edge(parent_dir, node_id, relationship="CONTAINS")
+            else:
+                self._graph.add_edge(project_id, node_id, relationship="CONTAINS")
+
+        # Set level on code nodes (file_level + 1)
+        for node_id, attrs in self._graph.nodes(data=True):
+            if attrs.get("type") in ("function", "class"):
+                file_id = node_id.split("::")[0]
+                if file_id in self._graph.nodes:
+                    file_level = self._graph.nodes[file_id].get("level", 0)
+                    self._graph.nodes[node_id]["level"] = file_level + 1
+
     def save(self, path: Path) -> None:
         """Save the graph to a JSON file using orjson.
 
